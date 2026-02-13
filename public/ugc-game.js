@@ -50,6 +50,69 @@ function buildCodeSrcdoc(rawCode) {
       (function () {
         const root = document.getElementById("game-root");
         const errorBox = document.getElementById("runtime-error");
+        function startFallbackGame() {
+          root.innerHTML = "";
+          const canvas = document.createElement("canvas");
+          canvas.width = 720;
+          canvas.height = 420;
+          root.appendChild(canvas);
+          const ctx = canvas.getContext("2d");
+          const keys = new Set();
+          const player = { x: 350, y: 200, w: 24, h: 24 };
+          const enemies = [];
+          let score = 0;
+          let t = 0;
+          function spawn() {
+            enemies.push({
+              x: Math.random() * (canvas.width - 18),
+              y: -20,
+              w: 18,
+              h: 18,
+              vy: 2 + Math.random() * 2.4
+            });
+          }
+          window.addEventListener("keydown", (e) => keys.add(e.key.toLowerCase()));
+          window.addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
+          function loop() {
+            t += 1;
+            if (keys.has("arrowleft")) player.x -= 4;
+            if (keys.has("arrowright")) player.x += 4;
+            if (keys.has("arrowup")) player.y -= 4;
+            if (keys.has("arrowdown")) player.y += 4;
+            player.x = Math.max(0, Math.min(canvas.width - player.w, player.x));
+            player.y = Math.max(0, Math.min(canvas.height - player.h, player.y));
+            if (t % 18 === 0) spawn();
+            for (const e of enemies) e.y += e.vy;
+            for (let i = enemies.length - 1; i >= 0; i -= 1) {
+              const e = enemies[i];
+              if (e.y > canvas.height + 30) {
+                enemies.splice(i, 1);
+                score += 1;
+                continue;
+              }
+              const hit =
+                player.x < e.x + e.w &&
+                player.x + player.w > e.x &&
+                player.y < e.y + e.h &&
+                player.y + player.h > e.y;
+              if (hit) {
+                score = 0;
+                enemies.length = 0;
+              }
+            }
+            ctx.fillStyle = "#08110d";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "#4f8f68";
+            for (const e of enemies) ctx.fillRect(e.x, e.y, e.w, e.h);
+            ctx.fillStyle = "#7be0a4";
+            ctx.fillRect(player.x, player.y, player.w, player.h);
+            ctx.fillStyle = "#d8eddf";
+            ctx.font = '700 18px sans-serif';
+            ctx.fillText("Fallback game (code failed). Score: " + score, 14, 24);
+            requestAnimationFrame(loop);
+          }
+          loop();
+        }
         function showError(text) {
           errorBox.style.display = "block";
           errorBox.textContent = String(text || "Runtime error");
@@ -66,6 +129,7 @@ function buildCodeSrcdoc(rawCode) {
 ${escaped}
         } catch (err) {
           showError(err && err.message ? err.message : String(err));
+          startFallbackGame();
         }
 
         setTimeout(function () {
@@ -76,6 +140,7 @@ ${escaped}
             showError(
               "Your code ran but did not render UI. Add elements to #game-root or create a canvas."
             );
+            startFallbackGame();
           }
         }, 350);
       })();

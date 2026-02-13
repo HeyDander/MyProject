@@ -692,7 +692,40 @@ function initGameCreatorForm() {
     iframe.className = "ugc-frame";
     iframe.sandbox = "allow-scripts";
     iframe.referrerPolicy = "no-referrer";
-    iframe.srcdoc = String(codeTextarea?.value || "").trim();
+    const source = String(codeTextarea?.value || "").trim();
+    const hasHtmlTags = /<\s*(html|body|script|canvas|div|style)\b/i.test(source);
+    if (hasHtmlTags) {
+      iframe.srcdoc = source;
+    } else {
+      const escaped = source
+        .replace(/<\/script/gi, "<\\/script")
+        .replace(/<!--/g, "<\\!--");
+      iframe.srcdoc = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      html, body { margin: 0; width: 100%; height: 100%; background: #08110d; overflow: hidden; }
+      #game-root { width: 100%; height: 100%; display: grid; place-items: center; color: #d8eddf; font-family: sans-serif; }
+      canvas { max-width: 100%; max-height: 100%; border: 1px solid #305640; background: #0b130f; }
+    </style>
+  </head>
+  <body>
+    <div id="game-root"></div>
+    <script>
+      (function () {
+        const root = document.getElementById("game-root");
+        try {
+${escaped}
+        } catch (err) {
+          root.textContent = "Code error: " + (err && err.message ? err.message : String(err));
+        }
+      })();
+    </script>
+  </body>
+</html>`;
+    }
     previewStage.replaceChildren(iframe);
     previewCleanup = () => {};
   };

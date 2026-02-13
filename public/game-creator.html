@@ -86,7 +86,12 @@
 
           <div data-code-settings hidden>
             <label for="game-code">Code (HTML with optional JS)</label>
-            <textarea id="game-code" name="codeContent" rows="10" placeholder="<html><body><canvas id='c'></canvas><script>/* your game */</script></body></html>"></textarea>
+            <textarea id="game-code" name="codeContent" rows="10" placeholder="For JS mode: draw to #game-root. For HTML mode: provide full HTML.">const root = document.getElementById("game-root");
+const info = document.createElement("div");
+info.style.font = "700 20px sans-serif";
+info.style.color = "#d8eddf";
+info.textContent = "My first code game";
+root.appendChild(info);</textarea>
           </div>
 
           <section class="scratch-preview" data-game-preview>
