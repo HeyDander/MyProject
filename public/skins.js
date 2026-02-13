@@ -334,6 +334,20 @@ async function onSkinRemove(skinId) {
   }
 }
 
+async function onSkinUnlist(skinId) {
+  setShopMessage("", false);
+  try {
+    await window.requestJson("/api/skins/unlist", {
+      method: "POST",
+      body: JSON.stringify({ skinId }),
+    });
+    await refreshProgress();
+    setShopMessage("Skin removed from sale.", false);
+  } catch (error) {
+    setShopMessage(error.message || "Failed to remove skin from sale.", true);
+  }
+}
+
 function renderShop() {
   const shopNodes = document.querySelectorAll("[data-skin-shop]");
   if (!shopNodes.length || !skinState.loaded) return;
@@ -402,6 +416,14 @@ function renderShop() {
         removeBtn.textContent = `Remove (+${Math.max(0, Number(skin.cost || 0))})`;
         removeBtn.addEventListener("click", () => onSkinRemove(skin.id));
         actions.appendChild(removeBtn);
+      }
+
+      if (skin.isCustom && skin.userCreated && skin.isListed) {
+        const unlistBtn = document.createElement("button");
+        unlistBtn.className = "btn btn-ghost skin-action";
+        unlistBtn.textContent = "Remove from sale";
+        unlistBtn.addEventListener("click", () => onSkinUnlist(skin.id));
+        actions.appendChild(unlistBtn);
       }
 
       card.appendChild(title);

@@ -503,6 +503,17 @@ async function initDatabase() {
       CHECK (user_id <> friend_user_id)
     )
   `);
+  await dbQuery(`
+    CREATE TABLE IF NOT EXISTS friend_requests (
+      id BIGSERIAL PRIMARY KEY,
+      requester_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      target_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CHECK (requester_user_id <> target_user_id)
+    )
+  `);
 
   const usersWithoutUsername = await dbAll(
     "SELECT id, email FROM users WHERE username IS NULL OR BTRIM(username) = ''"
@@ -705,6 +716,19 @@ async function skinExists(skinId) {
   if (SKIN_CATALOG[skinId]) return true;
   const custom = await dbGet("SELECT id FROM custom_skins WHERE id = $1", [skinId]);
   return Boolean(custom);
+}
+
+async function areFriends(userA, userB) {
+  const row = await dbGet(
+    `
+    SELECT 1 FROM friend_links
+    WHERE (user_id = $1 AND friend_user_id = $2)
+       OR (user_id = $2 AND friend_user_id = $1)
+    LIMIT 1
+    `,
+    [userA, userB]
+  );
+  return Boolean(row);
 }
 
 async function ensureProgress(userId) {
@@ -1136,6 +1160,64 @@ app.get("/api/player/home", async (req, res) => {
   });
 });
 
+app.post("/api/friends/request", async (req, res) => {
+  if (!isAuthed(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const username = normalizeUsername(req.body.username);
+  if (!username || username.length < 3) {
+    return res.status(400).json({ error: "Enter a valid username." });
+  }
+
+  const target = await dbGet(
+    "SELECT id, username FROM users WHERE lower(username) = lower($1)",
+    [username]
+  );
+  if (!target) {
+    return res.status(404).json({ error: "Player not found." });
+  }
+  if (Number(target.id) === Number(req.session.userId)) {
+    return res.status(400).json({ error: "You cannot add yourself." });
+  }
+
+  const alreadyFriends = await areFriends(req.session.userId, target.id);
+  if (alreadyFriends) {
+    return res.status(409).json({ error: "Already in friends." });
+  }
+
+  const pending = await dbGet(
+    `
+    SELECT id, requester_user_id, target_user_id
+    FROM friend_requests
+    WHERE status = 'pending'
+      AND (
+        (requester_user_id = $1 AND target_user_id = $2)
+        OR
+        (requester_user_id = $2 AND target_user_id = $1)
+      )
+    LIMIT 1
+    `,
+    [req.session.userId, target.id]
+  );
+  if (pending) {
+    if (Number(pending.requester_user_id) === Number(target.id)) {
+      return res.status(409).json({ error: "This player already sent you a request." });
+    }
+    return res.status(409).json({ error: "Friend request already sent." });
+  }
+
+  await dbQuery(
+    `
+    INSERT INTO friend_requests (requester_user_id, target_user_id, status, created_at, updated_at)
+    VALUES ($1, $2, 'pending', NOW(), NOW())
+    `,
+    [req.session.userId, target.id]
+  );
+
+  return res.json({ ok: true });
+});
+
 app.post("/api/friends/add", async (req, res) => {
   if (!isAuthed(req)) {
     return res.status(401).json({ error: "Unauthorized" });
@@ -1157,11 +1239,151 @@ app.post("/api/friends/add", async (req, res) => {
     return res.status(400).json({ error: "You cannot add yourself." });
   }
 
+  const alreadyFriends = await areFriends(req.session.userId, target.id);
+  if (alreadyFriends) {
+    return res.status(409).json({ error: "Already in friends." });
+  }
+
+  const pending = await dbGet(
+    `
+    SELECT id, requester_user_id, target_user_id
+    FROM friend_requests
+    WHERE status = 'pending'
+      AND (
+        (requester_user_id = $1 AND target_user_id = $2)
+        OR
+        (requester_user_id = $2 AND target_user_id = $1)
+      )
+    LIMIT 1
+    `,
+    [req.session.userId, target.id]
+  );
+  if (pending) {
+    if (Number(pending.requester_user_id) === Number(target.id)) {
+      return res.status(409).json({ error: "This player already sent you a request." });
+    }
+    return res.status(409).json({ error: "Friend request already sent." });
+  }
+
   await dbQuery(
-    "INSERT INTO friend_links (user_id, friend_user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+    `
+    INSERT INTO friend_requests (requester_user_id, target_user_id, status, created_at, updated_at)
+    VALUES ($1, $2, 'pending', NOW(), NOW())
+    `,
     [req.session.userId, target.id]
   );
 
+  return res.json({ ok: true });
+});
+
+app.get("/api/friends/requests", async (req, res) => {
+  if (!isAuthed(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const incoming = await dbAll(
+    `
+    SELECT fr.id, fr.created_at, u.username
+    FROM friend_requests fr
+    JOIN users u ON u.id = fr.requester_user_id
+    WHERE fr.target_user_id = $1 AND fr.status = 'pending'
+    ORDER BY fr.created_at DESC
+    `,
+    [req.session.userId]
+  );
+  const outgoing = await dbAll(
+    `
+    SELECT fr.id, fr.created_at, u.username
+    FROM friend_requests fr
+    JOIN users u ON u.id = fr.target_user_id
+    WHERE fr.requester_user_id = $1 AND fr.status = 'pending'
+    ORDER BY fr.created_at DESC
+    `,
+    [req.session.userId]
+  );
+
+  return res.json({
+    incoming: incoming.map((r) => ({
+      id: Number(r.id),
+      username: r.username || "player",
+      createdAt: r.created_at,
+    })),
+    outgoing: outgoing.map((r) => ({
+      id: Number(r.id),
+      username: r.username || "player",
+      createdAt: r.created_at,
+    })),
+  });
+});
+
+app.post("/api/friends/requests/:id/accept", async (req, res) => {
+  if (!isAuthed(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  const requestId = Number(req.params.id);
+  if (!Number.isInteger(requestId) || requestId <= 0) {
+    return res.status(400).json({ error: "Invalid request id." });
+  }
+
+  const requestRow = await dbGet(
+    `
+    SELECT id, requester_user_id, target_user_id, status
+    FROM friend_requests
+    WHERE id = $1
+    `,
+    [requestId]
+  );
+  if (!requestRow || requestRow.status !== "pending") {
+    return res.status(404).json({ error: "Request not found." });
+  }
+  if (Number(requestRow.target_user_id) !== Number(req.session.userId)) {
+    return res.status(403).json({ error: "You cannot accept this request." });
+  }
+
+  await dbQuery("UPDATE friend_requests SET status = 'accepted', updated_at = NOW() WHERE id = $1", [
+    requestId,
+  ]);
+  await dbQuery(
+    "INSERT INTO friend_links (user_id, friend_user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+    [requestRow.requester_user_id, requestRow.target_user_id]
+  );
+  await dbQuery(
+    "INSERT INTO friend_links (user_id, friend_user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+    [requestRow.target_user_id, requestRow.requester_user_id]
+  );
+
+  return res.json({ ok: true });
+});
+
+app.post("/api/friends/requests/:id/reject", async (req, res) => {
+  if (!isAuthed(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  const requestId = Number(req.params.id);
+  if (!Number.isInteger(requestId) || requestId <= 0) {
+    return res.status(400).json({ error: "Invalid request id." });
+  }
+
+  const requestRow = await dbGet(
+    `
+    SELECT id, requester_user_id, target_user_id, status
+    FROM friend_requests
+    WHERE id = $1
+    `,
+    [requestId]
+  );
+  if (!requestRow || requestRow.status !== "pending") {
+    return res.status(404).json({ error: "Request not found." });
+  }
+  const me = Number(req.session.userId);
+  const canReject = me === Number(requestRow.target_user_id) || me === Number(requestRow.requester_user_id);
+  if (!canReject) {
+    return res.status(403).json({ error: "You cannot reject this request." });
+  }
+
+  await dbQuery("UPDATE friend_requests SET status = 'rejected', updated_at = NOW() WHERE id = $1", [
+    requestId,
+  ]);
   return res.json({ ok: true });
 });
 
@@ -1172,29 +1394,36 @@ app.post("/api/coop/create", async (req, res) => {
 
   cleanupCoopRooms();
   const friendUsername = normalizeUsername(req.body.friendUsername);
-  if (!friendUsername || friendUsername.length < 3) {
-    return res.status(400).json({ error: "Enter a valid friend username." });
-  }
 
   const me = await dbGet("SELECT id, username FROM users WHERE id = $1", [req.session.userId]);
   if (!me) return res.status(404).json({ error: "User not found." });
 
-  const friend = await dbGet("SELECT id, username FROM users WHERE lower(username) = lower($1)", [
-    friendUsername,
-  ]);
-  if (!friend) {
-    return res.status(404).json({ error: "Friend not found." });
-  }
-  if (Number(friend.id) === Number(req.session.userId)) {
-    return res.status(400).json({ error: "You cannot create coop with yourself." });
-  }
+  let invitedFriendId = null;
+  let invitedFriendName = "";
+  if (friendUsername) {
+    const friend = await dbGet("SELECT id, username FROM users WHERE lower(username) = lower($1)", [
+      friendUsername,
+    ]);
+    if (!friend) {
+      return res.status(404).json({ error: "Friend not found." });
+    }
+    if (Number(friend.id) === Number(req.session.userId)) {
+      return res.status(400).json({ error: "You cannot create coop with yourself." });
+    }
 
-  const relation = await dbGet(
-    "SELECT 1 FROM friend_links WHERE user_id = $1 AND friend_user_id = $2",
-    [req.session.userId, friend.id]
-  );
-  if (!relation) {
-    return res.status(403).json({ error: "Add this player to friends first." });
+    const relation = await dbGet(
+      `
+      SELECT 1
+      FROM friend_links
+      WHERE (user_id = $1 AND friend_user_id = $2) OR (user_id = $2 AND friend_user_id = $1)
+      `,
+      [req.session.userId, friend.id]
+    );
+    if (!relation) {
+      return res.status(403).json({ error: "Add this player to friends first." });
+    }
+    invitedFriendId = Number(friend.id);
+    invitedFriendName = friend.username || `player-${friend.id}`;
   }
 
   let code = makeRoomCode();
@@ -1205,9 +1434,9 @@ app.post("/api/coop/create", async (req, res) => {
     updatedAt: Date.now(),
     status: "waiting",
     hostUserId: Number(req.session.userId),
-    friendUserId: Number(friend.id),
+    friendUserId: invitedFriendId,
     hostName: me.username || `player-${me.id}`,
-    friendName: friend.username || `player-${friend.id}`,
+    friendName: invitedFriendName,
     hostPoints: 0,
     friendPoints: 0,
     hostLastGame: "",
@@ -1230,11 +1459,35 @@ app.post("/api/coop/join", async (req, res) => {
   if (!room) return res.status(404).json({ error: "Room not found or expired." });
 
   const role = coopRole(room, req.session.userId);
-  if (!role) return res.status(403).json({ error: "This room is not for your account." });
-  if (role === "friend") room.status = "active";
+  if (!role && room.friendUserId) {
+    return res.status(403).json({ error: "This room is private for invited friend." });
+  }
+
+  if (!role && !room.friendUserId) {
+    if (Number(room.hostUserId) === Number(req.session.userId)) {
+      return res.status(400).json({ error: "You already are host in this room." });
+    }
+    const relation = await dbGet(
+      `
+      SELECT 1
+      FROM friend_links
+      WHERE (user_id = $1 AND friend_user_id = $2) OR (user_id = $2 AND friend_user_id = $1)
+      `,
+      [room.hostUserId, req.session.userId]
+    );
+    if (!relation) {
+      return res.status(403).json({ error: "Only friends of host can join this room." });
+    }
+    const me = await dbGet("SELECT id, username FROM users WHERE id = $1", [req.session.userId]);
+    room.friendUserId = Number(req.session.userId);
+    room.friendName = me?.username || `player-${req.session.userId}`;
+  }
+
+  const effectiveRole = coopRole(room, req.session.userId);
+  if (effectiveRole === "friend") room.status = "active";
   room.updatedAt = Date.now();
 
-  return res.json({ ok: true, code, role });
+  return res.json({ ok: true, code, role: effectiveRole || role });
 });
 
 app.get("/api/coop/state/:code", async (req, res) => {
@@ -1825,6 +2078,35 @@ app.post("/api/skins/create", async (req, res) => {
   ]);
 
   return res.json({ ok: true, skinId, points: progress.points });
+});
+
+app.post("/api/skins/unlist", async (req, res) => {
+  if (!isAuthed(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const skinId = String(req.body.skinId || "").trim();
+  if (!skinId || !skinId.startsWith(CUSTOM_SKIN_ID_PREFIX)) {
+    return res.status(400).json({ error: "Invalid custom skin id." });
+  }
+
+  const customSkin = await getCustomSkinById(skinId);
+  if (!customSkin) {
+    return res.status(404).json({ error: "Custom skin not found." });
+  }
+  if (Number(customSkin.creator_user_id) !== Number(req.session.userId)) {
+    return res.status(403).json({ error: "You can only manage your own skins." });
+  }
+
+  await dbQuery(
+    "UPDATE custom_skins SET is_listed = FALSE, updated_at = NOW() WHERE id = $1",
+    [skinId]
+  ).catch(async () => {
+    // Backward compatibility for old schema without updated_at.
+    await dbQuery("UPDATE custom_skins SET is_listed = FALSE WHERE id = $1", [skinId]);
+  });
+
+  return res.json({ ok: true, skinId, isListed: false });
 });
 
 app.post("/api/register", async (req, res) => {
