@@ -83,6 +83,9 @@ function setMeta() {
   canvas.hidden = isWordle;
   descEl.hidden = isWordle;
   if (wordleWrapEl) wordleWrapEl.hidden = !isWordle;
+  if (wordleFormEl) wordleFormEl.hidden = !isWordle;
+  if (wordleInputEl) wordleInputEl.disabled = !isWordle;
+  if (wordleStatusEl) wordleStatusEl.hidden = !isWordle;
 }
 
 function resetGame() {

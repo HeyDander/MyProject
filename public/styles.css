@@ -28,6 +28,11 @@ body {
   overflow: hidden;
 }
 
+/* Keep hidden blocks invisible across all pages and game modes. */
+[hidden] {
+  display: none !important;
+}
+
 .bg-orb {
   position: fixed;
   border-radius: 50%;
