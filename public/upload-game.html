@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Upload Game</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="dashboard-body">
+    <div class="bg-orb orb-a" aria-hidden="true"></div>
+    <div class="bg-orb orb-b" aria-hidden="true"></div>
+
+    <main class="dashboard-wrap">
+      <section class="dashboard-card hub-card" data-dashboard>
+        <p class="brand-kicker">Uploader</p>
+        <h1>Upload Game From PC</h1>
+        <p class="card-subtitle">Create your game on computer, then upload JSON package to publish inside app.</p>
+
+        <form class="creator-form" data-upload-game-form>
+          <label>
+            Game package file (.json)
+            <input type="file" name="gameFile" accept="application/json,.json" />
+          </label>
+
+          <label>
+            Title
+            <input type="text" name="title" minlength="3" maxlength="64" required placeholder="My custom game" />
+          </label>
+
+          <label>
+            Description
+            <textarea name="description" maxlength="220" rows="3" placeholder="Short game description"></textarea>
+          </label>
+
+          <label>
+            HTML game code
+            <textarea
+              name="htmlContent"
+              rows="14"
+              minlength="60"
+              required
+              placeholder="<!doctype html> ..."
+            ></textarea>
+          </label>
+
+          <label class="remember">
+            <input type="checkbox" name="isPublished" checked />
+            Publish for other players
+          </label>
+
+          <button class="btn" type="submit">Upload and Publish</button>
+          <p class="shop-message" data-upload-game-message aria-live="polite"></p>
+        </form>
+
+        <article class="hub-extra-card">
+          <h2>JSON package format</h2>
+          <p class="hub-muted">Save this as file and upload:</p>
+          <pre class="code-preview">{
+  "title": "My Runner",
+  "description": "Avoid blocks and score points",
+  "htmlContent": "<!doctype html><html><body><h1>Game</h1></body></html>"
+}</pre>
+        </article>
+
+        <div class="dashboard-actions">
+          <a class="btn btn-ghost" href="/upload-guide">Open PC Guide</a>
+          <a class="btn btn-ghost" href="/dashboard">Back to hub</a>
+          <button class="btn" type="button" data-logout>Log out</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js" defer></script>
+    <script src="/skins.js" defer></script>
+  </body>
+</html>

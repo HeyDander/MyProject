@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PC Upload Guide</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="dashboard-body">
+    <div class="bg-orb orb-a" aria-hidden="true"></div>
+    <div class="bg-orb orb-b" aria-hidden="true"></div>
+
+    <main class="dashboard-wrap">
+      <section class="dashboard-card hub-card" data-dashboard>
+        <p class="brand-kicker">Guide</p>
+        <h1>How To Build Game On PC</h1>
+        <p class="card-subtitle">Create game on computer, export JSON package, upload into app.</p>
+
+        <article class="hub-extra-card">
+          <h2>Best language</h2>
+          <p class="hub-muted">
+            Use <strong>JavaScript + HTML + CSS</strong>. This is the main supported format because
+            uploaded game runs inside browser frame (WebView).
+          </p>
+          <p class="hub-muted">
+            You can code in VS Code, Cursor, WebStorm, or any editor.
+          </p>
+        </article>
+
+        <article class="hub-extra-card">
+          <h2>PC Steps</h2>
+          <div class="hub-list">
+            <p class="hub-row"><span>1. Create file</span><strong>game.html</strong></p>
+            <p class="hub-row"><span>2. Put your HTML/CSS/JS game code</span><strong>inside file</strong></p>
+            <p class="hub-row"><span>3. Create package file</span><strong>my-game.json</strong></p>
+            <p class="hub-row"><span>4. Add title/description/htmlContent</span><strong>JSON format</strong></p>
+            <p class="hub-row"><span>5. Upload on page</span><strong>Upload Game</strong></p>
+          </div>
+        </article>
+
+        <article class="hub-extra-card">
+          <h2>JSON Package Template</h2>
+          <pre class="code-preview">{
+  "title": "My Cool Game",
+  "description": "Short game description",
+  "htmlContent": "<!doctype html><html><head><meta charset='UTF-8'><style>body{margin:0;background:#08110d;color:#d8eddf;font-family:sans-serif}canvas{display:block;margin:16px auto;border:1px solid #2e6047}</style></head><body><canvas id='game' width='420' height='520'></canvas><script>(function(){const c=document.getElementById('game');const x=c.getContext('2d');let px=200;function draw(){x.fillStyle='#08110d';x.fillRect(0,0,c.width,c.height);x.fillStyle='#7be0a4';x.fillRect(px,470,40,20);requestAnimationFrame(draw)}window.addEventListener('keydown',e=>{if(e.key==='ArrowLeft')px-=20;if(e.key==='ArrowRight')px+=20;});draw();})();</script></body></html>"
+}</pre>
+        </article>
+
+        <article class="hub-extra-card">
+          <h2>Important rules</h2>
+          <div class="hub-list">
+            <p class="hub-row"><span>No backend code in package</span><strong>Client only</strong></p>
+            <p class="hub-row"><span>Keep size moderate</span><strong>under 180 KB HTML</strong></p>
+            <p class="hub-row"><span>Mobile controls recommended</span><strong>touch + drag</strong></p>
+            <p class="hub-row"><span>Use safe JS</span><strong>no external dangerous scripts</strong></p>
+          </div>
+        </article>
+
+        <div class="dashboard-actions">
+          <a class="btn" href="/upload-game">Open Upload Page</a>
+          <a class="btn btn-ghost" href="/dashboard">Back to hub</a>
+          <button class="btn" type="button" data-logout>Log out</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js" defer></script>
+    <script src="/skins.js" defer></script>
+  </body>
+</html>

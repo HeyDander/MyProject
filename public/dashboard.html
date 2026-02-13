@@ -81,13 +81,6 @@
 
         </section>
 
-        <section class="hub-extra-card">
-          <h2>Community Games</h2>
-          <div class="hub-list" data-user-games-list>
-            <p class="hub-muted">No community games yet.</p>
-          </div>
-        </section>
-
         <section class="hub-extra-grid" data-hub-extras>
           <article class="hub-extra-card">
             <h2>Player Profile</h2>
@@ -137,12 +130,20 @@
             </div>
             <p class="shop-message" data-friend-message aria-live="polite"></p>
           </article>
+
+          <article class="hub-extra-card">
+            <h2>Your Uploaded Games</h2>
+            <div class="hub-list" data-uploaded-games-list>
+              <p class="hub-muted">Loading uploaded games...</p>
+            </div>
+          </article>
         </section>
 
         <div class="dashboard-actions">
           <a class="btn" href="/shop">Open Shop</a>
           <a class="btn" href="/inventory">Inventory</a>
-          <a class="btn" href="/game-creator" data-open-game-creator>Create Game (350 points)</a>
+          <a class="btn" href="/upload-game">Upload Game</a>
+          <a class="btn btn-ghost" href="/upload-guide">PC Upload Guide</a>
           <a class="btn" href="/creator" data-open-creator>Create Your Skin (200 points)</a>
           <a class="btn" href="/leaderboard">Leaderboard</a>
           <button class="btn btn-ghost" type="button" data-delete-account>Delete Account</button>

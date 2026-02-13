@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>User Game</title>
+    <title>Uploaded Game</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -20,16 +20,19 @@
       <section class="dashboard-card game-card">
         <div class="game-head">
           <div>
-            <p class="brand-kicker">Community Game</p>
-            <h1 data-ugc-title>Loading...</h1>
+            <p class="brand-kicker">Uploaded Game</p>
+            <h1 data-uploaded-title>Loading...</h1>
+            <p class="card-subtitle" data-uploaded-meta></p>
           </div>
           <div class="game-meta">
-            <p data-ugc-meta>Loading...</p>
+            <p>Total points: <strong data-points>0</strong></p>
+            <p>Current skin: <strong data-skin-name>Classic</strong></p>
           </div>
         </div>
 
-        <p class="card-subtitle game-help" data-ugc-desc></p>
-        <div class="ugc-stage" data-ugc-stage></div>
+        <div class="ugc-stage" data-uploaded-stage>
+          <p class="hub-muted">Loading game...</p>
+        </div>
 
         <div class="dashboard-actions">
           <a class="btn btn-ghost" href="/dashboard">Back to hub</a>
@@ -40,6 +43,6 @@
 
     <script src="/app.js" defer></script>
     <script src="/skins.js" defer></script>
-    <script src="/ugc-game.js" defer></script>
+    <script src="/uploaded-game.js" defer></script>
   </body>
 </html>

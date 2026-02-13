@@ -1238,3 +1238,15 @@ button:active {
     font-size: 0.72rem;
   }
 }
+
+.code-preview {
+  margin: 10px 0 0;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(90, 135, 110, 0.35);
+  background: rgba(6, 12, 9, 0.92);
+  color: #d8eee1;
+  overflow-x: auto;
+  line-height: 1.45;
+  font-size: 0.88rem;
+}
