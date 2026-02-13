@@ -1,11 +1,10 @@
 import React, { useMemo, useRef, useState } from "react";
-import { ActivityIndicator, BackHandler, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, BackHandler, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { WebView } from "react-native-webview";
 
-const DEFAULT_URL =
-  Platform.OS === "android" ? "http://10.0.2.2:3000/login" : "http://localhost:3000/login";
+const DEFAULT_URL = "https://myproject-production-ed20.up.railway.app/dashboard";
 const SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL || DEFAULT_URL;
 
 export default function App() {
@@ -31,12 +30,6 @@ export default function App() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="light" />
-      <View style={styles.topBar}>
-        <Text style={styles.title}>Game Hub Mobile</Text>
-        <Pressable style={styles.refreshBtn} onPress={() => webRef.current?.reload()}>
-          <Text style={styles.refreshText}>Reload</Text>
-        </Pressable>
-      </View>
 
       <WebView
         ref={webRef}
@@ -49,7 +42,7 @@ export default function App() {
         onError={() => {
           setLoading(false);
           setLoadError(
-            `Cannot open ${SERVER_URL}. Start server and use EXPO_PUBLIC_SERVER_URL with your computer LAN IP.`
+            `Cannot open ${SERVER_URL}. Set EXPO_PUBLIC_SERVER_URL to your Railway domain (https://.../login).`
           );
         }}
         onNavigationStateChange={(state) => setCanGoBack(state.canGoBack)}
@@ -81,34 +74,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#09110d",
   },
-  topBar: {
-    height: 52,
-    backgroundColor: "#0d1812",
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(116, 198, 145, 0.3)",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 14,
-  },
-  title: {
-    color: "#dbe8df",
-    fontSize: 17,
-    fontWeight: "700",
-  },
-  refreshBtn: {
-    backgroundColor: "#3d8b5f",
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  refreshText: {
-    color: "#f4fff8",
-    fontWeight: "700",
-  },
   loaderOverlay: {
     position: "absolute",
-    top: 52,
+    top: 0,
     left: 0,
     right: 0,
     bottom: 0,
