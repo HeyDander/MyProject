@@ -129,16 +129,11 @@ async function initHubExtras() {
   const lastGameLine = document.querySelector("[data-last-game-line]");
   const missionsList = document.querySelector("[data-missions-list]");
   const achievementsList = document.querySelector("[data-achievements-list]");
-  const eventTitle = document.querySelector("[data-event-title]");
-  const eventDesc = document.querySelector("[data-event-desc]");
   const friendsList = document.querySelector("[data-friends-list]");
-  const shareBtn = document.querySelector("[data-share-card]");
-  const shareMsg = document.querySelector("[data-share-message]");
   const continueBtn = document.querySelector("[data-continue-last]");
   const friendForm = document.querySelector("[data-friend-form]");
   const friendMsg = document.querySelector("[data-friend-message]");
 
-  let shareText = "";
   let lastGame = "/snake";
 
   const renderRows = (container, rows) => {
@@ -181,8 +176,6 @@ async function initHubExtras() {
       }))
     );
 
-    if (eventTitle) eventTitle.textContent = `${data.event?.title || "Event"}`;
-    if (eventDesc) eventDesc.textContent = `${data.event?.description || ""}`;
     renderRows(
       friendsList,
       (data.friendsTop || []).map((f) => ({
@@ -190,7 +183,6 @@ async function initHubExtras() {
         right: `${f.season_points} season`,
       }))
     );
-    shareText = data.shareText || "";
   };
 
   try {
@@ -202,35 +194,6 @@ async function initHubExtras() {
   if (continueBtn) {
     continueBtn.addEventListener("click", () => {
       window.location.href = lastGame || "/snake";
-    });
-  }
-
-  if (shareBtn) {
-    shareBtn.addEventListener("click", async () => {
-      if (!shareText) return;
-      try {
-        if (navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText(shareText);
-        } else {
-          const ta = document.createElement("textarea");
-          ta.value = shareText;
-          document.body.appendChild(ta);
-          ta.select();
-          document.execCommand("copy");
-          ta.remove();
-        }
-        if (shareMsg) {
-          shareMsg.textContent = "Share card copied.";
-          shareMsg.classList.remove("is-error");
-          shareMsg.classList.add("is-success");
-        }
-      } catch (_error) {
-        if (shareMsg) {
-          shareMsg.textContent = "Failed to copy.";
-          shareMsg.classList.remove("is-success");
-          shareMsg.classList.add("is-error");
-        }
-      }
     });
   }
 
