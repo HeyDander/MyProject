@@ -194,6 +194,138 @@ function initWatermark() {
   document.body.appendChild(mark);
 }
 
+function initMobileGamepad() {
+  const hasGameBoard = document.querySelector(
+    ".snake-board, .shooter-board, .arcade-board, [data-2042-board]"
+  );
+  if (!hasGameBoard) return;
+  if (!window.matchMedia || !window.matchMedia("(pointer: coarse)").matches) return;
+  if (document.querySelector("[data-mobile-gamepad]")) return;
+
+  const pad = document.createElement("div");
+  pad.className = "mobile-gamepad";
+  pad.setAttribute("data-mobile-gamepad", "true");
+
+  const left = document.createElement("button");
+  left.type = "button";
+  left.className = "mobile-pad-btn";
+  left.textContent = "◀";
+  left.setAttribute("aria-label", "Move left");
+
+  const right = document.createElement("button");
+  right.type = "button";
+  right.className = "mobile-pad-btn";
+  right.textContent = "▶";
+  right.setAttribute("aria-label", "Move right");
+
+  const up = document.createElement("button");
+  up.type = "button";
+  up.className = "mobile-pad-btn";
+  up.textContent = "▲";
+  up.setAttribute("aria-label", "Move up");
+
+  const down = document.createElement("button");
+  down.type = "button";
+  down.className = "mobile-pad-btn";
+  down.textContent = "▼";
+  down.setAttribute("aria-label", "Move down");
+
+  const action = document.createElement("button");
+  action.type = "button";
+  action.className = "mobile-action-btn";
+  action.textContent = "Action";
+  action.setAttribute("aria-label", "Action");
+
+  const arrows = document.createElement("div");
+  arrows.className = "mobile-pad-arrows";
+  arrows.appendChild(up);
+  arrows.appendChild(left);
+  arrows.appendChild(down);
+  arrows.appendChild(right);
+
+  pad.appendChild(arrows);
+  pad.appendChild(action);
+  document.body.appendChild(pad);
+
+  const pressed = new Set();
+  const dispatchKey = (type, key) => {
+    window.dispatchEvent(
+      new KeyboardEvent(type, {
+        key,
+        bubbles: true,
+      })
+    );
+  };
+
+  const bindHoldButton = (el, key) => {
+    const onDown = (event) => {
+      event.preventDefault();
+      if (pressed.has(key)) return;
+      pressed.add(key);
+      dispatchKey("keydown", key);
+    };
+    const onUp = (event) => {
+      event.preventDefault();
+      if (!pressed.has(key)) return;
+      pressed.delete(key);
+      dispatchKey("keyup", key);
+    };
+    el.addEventListener("pointerdown", onDown);
+    el.addEventListener("pointerup", onUp);
+    el.addEventListener("pointercancel", onUp);
+    el.addEventListener("pointerleave", onUp);
+  };
+
+  bindHoldButton(left, "ArrowLeft");
+  bindHoldButton(right, "ArrowRight");
+  bindHoldButton(up, "ArrowUp");
+  bindHoldButton(down, "ArrowDown");
+  bindHoldButton(action, " ");
+}
+
+function initLastGameResume() {
+  const LAST_GAME_KEY = "last-game-path";
+  const path = window.location.pathname;
+
+  const isGamePath =
+    path === "/snake" ||
+    path === "/shooter" ||
+    path === "/2042" ||
+    path === "/pong" ||
+    path === "/breakout" ||
+    path === "/dodger" ||
+    path.startsWith("/game/");
+
+  if (isGamePath) {
+    localStorage.setItem(
+      LAST_GAME_KEY,
+      `${window.location.pathname}${window.location.search}${window.location.hash}`
+    );
+    return;
+  }
+
+  if (path !== "/dashboard") return;
+  const target = localStorage.getItem(LAST_GAME_KEY);
+  if (!target || typeof target !== "string") return;
+
+  const isValidTarget =
+    target === "/snake" ||
+    target === "/shooter" ||
+    target === "/2042" ||
+    target === "/pong" ||
+    target === "/breakout" ||
+    target === "/dodger" ||
+    target.startsWith("/game/");
+
+  if (!isValidTarget) return;
+
+  // Skip redirect if user just arrived from auth pages and wants hub first.
+  const fromAuth = document.referrer.includes("/login") || document.referrer.includes("/register");
+  if (fromAuth) return;
+
+  window.location.replace(target);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   initAuthForm();
   initPasswordToggles();
@@ -202,4 +334,6 @@ document.addEventListener("DOMContentLoaded", () => {
   initDeleteAccount();
   preventPageScrollKeys();
   initWatermark();
+  initMobileGamepad();
+  initLastGameResume();
 });
