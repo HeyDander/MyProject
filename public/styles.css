@@ -561,6 +561,12 @@ button:active {
   color: #d6ebdd;
 }
 
+.hub-row .btn {
+  padding: 6px 10px;
+  min-height: 34px;
+  font-size: 0.82rem;
+}
+
 .friend-form {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -596,7 +602,9 @@ button:active {
 }
 
 .creator-form input[type="text"],
-.creator-form input[type="number"] {
+.creator-form input[type="number"],
+.creator-form textarea,
+.creator-form select {
   width: 100%;
   border: 1px solid #355846;
   color: #e3ece6;
@@ -604,6 +612,25 @@ button:active {
   border-radius: 10px;
   padding: 10px 12px;
   font: inherit;
+}
+
+.creator-form textarea {
+  resize: vertical;
+  min-height: 160px;
+}
+
+.ugc-stage {
+  width: 100%;
+  display: grid;
+  place-items: center;
+}
+
+.ugc-frame {
+  width: min(900px, 100%);
+  aspect-ratio: 16 / 9;
+  border: 1px solid #305640;
+  border-radius: 14px;
+  background: #08110d;
 }
 
 .creator-grid {

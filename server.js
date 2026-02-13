@@ -13,6 +13,7 @@ const MAX_CHALLENGE_GAMES = 10;
 const MAX_SKINS = 50;
 const CUSTOM_SKIN_ID_PREFIX = "custom-";
 const CREATOR_UNLOCK_POINTS = 200;
+const GAME_CREATOR_UNLOCK_POINTS = 350;
 const DAILY_MISSIONS = [
   { id: "daily_points_120", label: "Earn 120 points today", type: "day_points", target: 120 },
   { id: "daily_points_260", label: "Earn 260 points today", type: "day_points", target: 260 },
@@ -309,6 +310,20 @@ async function initDatabase() {
     )
   `);
   await dbQuery(`
+    CREATE TABLE IF NOT EXISTS user_games (
+      id BIGSERIAL PRIMARY KEY,
+      creator_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      slug TEXT UNIQUE NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      kind TEXT NOT NULL CHECK (kind IN ('code', 'scratch')),
+      code_content TEXT NOT NULL DEFAULT '',
+      scratch_json TEXT NOT NULL DEFAULT '{}',
+      is_published BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await dbQuery(`
     CREATE TABLE IF NOT EXISTS user_achievements (
       user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       badge_id TEXT NOT NULL,
@@ -353,6 +368,15 @@ function normalizeUsername(username) {
     .replace(/\s+/g, "_")
     .replace(/[^a-zA-Z0-9_-]/g, "")
     .slice(0, 24);
+}
+
+function normalizeSlug(input) {
+  return String(input || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
+    .slice(0, 48);
 }
 
 function generateVerificationCode() {
@@ -711,12 +735,24 @@ app.get("/inventory", requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "public", "inventory.html"));
 });
 
+app.get("/game-creator", requireAuth, async (req, res) => {
+  const progress = await ensureProgress(req.session.userId);
+  if (progress.points < GAME_CREATOR_UNLOCK_POINTS) {
+    return res.redirect("/dashboard");
+  }
+  return res.sendFile(path.join(__dirname, "public", "game-creator.html"));
+});
+
 app.get("/creator", requireAuth, async (req, res) => {
   const progress = await ensureProgress(req.session.userId);
   if (progress.points < CREATOR_UNLOCK_POINTS) {
     return res.redirect("/dashboard");
   }
   res.sendFile(path.join(__dirname, "public", "creator.html"));
+});
+
+app.get("/ugc/:slug", requireAuth, (req, res) => {
+  return res.sendFile(path.join(__dirname, "public", "ugc-game.html"));
 });
 
 app.get("/challenge/:id", requireAuth, (req, res) => {
@@ -960,6 +996,142 @@ app.post("/api/friends/add", async (req, res) => {
   );
 
   return res.json({ ok: true });
+});
+
+app.get("/api/user-games", async (req, res) => {
+  if (!isAuthed(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const rows = await dbAll(
+    `
+    SELECT
+      g.id, g.slug, g.title, g.description, g.kind, g.created_at, g.creator_user_id, g.is_published,
+      u.username AS creator_username
+    FROM user_games g
+    JOIN users u ON u.id = g.creator_user_id
+    WHERE g.is_published = TRUE OR g.creator_user_id = $1
+    ORDER BY g.created_at DESC
+    LIMIT 100
+    `,
+    [req.session.userId]
+  );
+
+  return res.json({
+    games: rows.map((row) => ({
+      id: Number(row.id),
+      slug: row.slug,
+      title: row.title,
+      description: row.description,
+      kind: row.kind,
+      createdAt: row.created_at,
+      creator: row.creator_username || `player-${row.creator_user_id}`,
+      mine: Number(row.creator_user_id) === Number(req.session.userId),
+    })),
+  });
+});
+
+app.get("/api/user-games/:slug", async (req, res) => {
+  if (!isAuthed(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const slug = normalizeSlug(req.params.slug);
+  if (!slug) return res.status(400).json({ error: "Invalid game id." });
+
+  const game = await dbGet(
+    `
+    SELECT
+      g.id, g.slug, g.title, g.description, g.kind, g.code_content, g.scratch_json, g.creator_user_id, g.is_published,
+      u.username AS creator_username
+    FROM user_games g
+    JOIN users u ON u.id = g.creator_user_id
+    WHERE g.slug = $1
+    `,
+    [slug]
+  );
+  if (!game) return res.status(404).json({ error: "Game not found." });
+  if (!game.is_published && Number(game.creator_user_id) !== Number(req.session.userId)) {
+    return res.status(403).json({ error: "Access denied." });
+  }
+
+  let scratch = {};
+  try {
+    scratch = JSON.parse(game.scratch_json || "{}");
+  } catch (_err) {
+    scratch = {};
+  }
+
+  return res.json({
+    id: Number(game.id),
+    slug: game.slug,
+    title: game.title,
+    description: game.description,
+    kind: game.kind,
+    codeContent: game.code_content || "",
+    scratch,
+    creator: game.creator_username || `player-${game.creator_user_id}`,
+    mine: Number(game.creator_user_id) === Number(req.session.userId),
+  });
+});
+
+app.post("/api/user-games/create", async (req, res) => {
+  if (!isAuthed(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const progress = await ensureProgress(req.session.userId);
+  if (progress.points < GAME_CREATOR_UNLOCK_POINTS) {
+    return res.status(400).json({ error: `Need ${GAME_CREATOR_UNLOCK_POINTS} points to use game creator.` });
+  }
+
+  const title = String(req.body.title || "").trim().slice(0, 48);
+  const description = String(req.body.description || "").trim().slice(0, 220);
+  const kind = String(req.body.kind || "").trim();
+  if (title.length < 3) return res.status(400).json({ error: "Title must be at least 3 chars." });
+  if (kind !== "code" && kind !== "scratch") {
+    return res.status(400).json({ error: "Invalid game type." });
+  }
+
+  const baseSlug = normalizeSlug(title) || `user-game-${Date.now()}`;
+  let slug = baseSlug;
+  let n = 1;
+  while (await dbGet("SELECT id FROM user_games WHERE slug = $1", [slug])) {
+    n += 1;
+    slug = `${baseSlug}-${n}`;
+  }
+
+  let codeContent = "";
+  let scratchJson = "{}";
+  if (kind === "code") {
+    codeContent = String(req.body.codeContent || "").trim();
+    if (codeContent.length < 30) {
+      return res.status(400).json({ error: "Code content is too short." });
+    }
+    if (codeContent.length > 40000) {
+      return res.status(400).json({ error: "Code content is too large." });
+    }
+  } else {
+    const raw = req.body.scratch || {};
+    const scratch = {
+      mode: String(raw.mode || "dodger").slice(0, 20),
+      speed: Math.max(1, Math.min(6, Number(raw.speed || 3))),
+      playerColor: /^#[0-9a-fA-F]{6}$/.test(String(raw.playerColor || "")) ? String(raw.playerColor) : "#7be0a4",
+      enemyColor: /^#[0-9a-fA-F]{6}$/.test(String(raw.enemyColor || "")) ? String(raw.enemyColor) : "#4f8f68",
+      bgColor: /^#[0-9a-fA-F]{6}$/.test(String(raw.bgColor || "")) ? String(raw.bgColor) : "#08110d",
+    };
+    scratchJson = JSON.stringify(scratch);
+  }
+
+  await dbQuery(
+    `
+    INSERT INTO user_games (creator_user_id, slug, title, description, kind, code_content, scratch_json, is_published)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)
+    `,
+    [req.session.userId, slug, title, description, kind, codeContent, scratchJson]
+  );
+
+  return res.json({ ok: true, slug });
 });
 
 app.get("/api/progress", async (req, res) => {

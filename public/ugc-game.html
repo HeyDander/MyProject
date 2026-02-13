@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>User Game</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="dashboard-body">
+    <div class="bg-orb orb-a" aria-hidden="true"></div>
+    <div class="bg-orb orb-b" aria-hidden="true"></div>
+
+    <main class="dashboard-wrap">
+      <section class="dashboard-card game-card">
+        <div class="game-head">
+          <div>
+            <p class="brand-kicker">Community Game</p>
+            <h1 data-ugc-title>Loading...</h1>
+          </div>
+          <div class="game-meta">
+            <p data-ugc-meta>Loading...</p>
+          </div>
+        </div>
+
+        <p class="card-subtitle game-help" data-ugc-desc></p>
+        <div class="ugc-stage" data-ugc-stage></div>
+
+        <div class="dashboard-actions">
+          <a class="btn btn-ghost" href="/dashboard">Back to hub</a>
+          <button class="btn" type="button" data-logout>Log out</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js" defer></script>
+    <script src="/skins.js" defer></script>
+    <script src="/ugc-game.js" defer></script>
+  </body>
+</html>

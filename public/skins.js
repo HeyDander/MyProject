@@ -211,6 +211,16 @@ function updateProgressUI() {
     }
   }
 
+  const gameCreatorLink = document.querySelector("[data-open-game-creator]");
+  if (gameCreatorLink) {
+    const canOpen = skinState.points >= 350;
+    gameCreatorLink.classList.toggle("disabled", !canOpen);
+    gameCreatorLink.setAttribute("aria-disabled", canOpen ? "false" : "true");
+    gameCreatorLink.textContent = canOpen
+      ? "Create Game (350 points)"
+      : "Create Game (need 350 points)";
+  }
+
   renderShop();
   emitSkinChange();
 }
@@ -471,6 +481,16 @@ function initCreatorForm() {
   });
 }
 
+function initGameCreatorLink() {
+  const gameCreatorLink = document.querySelector("[data-open-game-creator]");
+  if (!gameCreatorLink) return;
+  gameCreatorLink.addEventListener("click", (event) => {
+    if (skinState.points >= 350) return;
+    event.preventDefault();
+    setShopMessage("You need 350 points to open game creator.", true);
+  });
+}
+
 function flushPoints() {
   if (skinState.pendingPoints <= 0) return;
   const pointsToSend = skinState.pendingPoints;
@@ -517,5 +537,6 @@ document.addEventListener("DOMContentLoaded", () => {
     return;
   }
   initCreatorForm();
+  initGameCreatorLink();
   loadProgress();
 });

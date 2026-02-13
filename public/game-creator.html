@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Game Creator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="dashboard-body">
+    <div class="bg-orb orb-a" aria-hidden="true"></div>
+    <div class="bg-orb orb-b" aria-hidden="true"></div>
+
+    <main class="dashboard-wrap">
+      <section class="dashboard-card hub-card">
+        <p class="brand-kicker">Game Creator</p>
+        <h1>Create Your Game</h1>
+        <p class="card-subtitle">Unlocks at 350 points. Choose Code or Scratch mode.</p>
+
+        <div class="progress-line">
+          <p>Total points: <strong data-points>0</strong></p>
+          <p>Current skin: <strong data-skin-name>Classic</strong></p>
+        </div>
+
+        <form class="creator-form" data-game-creator-form>
+          <label for="game-title">Title</label>
+          <input id="game-title" name="title" type="text" minlength="3" maxlength="48" required />
+
+          <label for="game-desc">Description</label>
+          <input id="game-desc" name="description" type="text" maxlength="220" />
+
+          <label for="game-kind">Mode</label>
+          <select id="game-kind" name="kind" data-game-kind>
+            <option value="scratch">Scratch-style (visual)</option>
+            <option value="code">Code (HTML/JS)</option>
+          </select>
+
+          <div data-scratch-settings>
+            <div class="creator-grid">
+              <label>Gameplay
+                <select name="scratchMode">
+                  <option value="dodger">Dodger</option>
+                  <option value="collector">Collector</option>
+                  <option value="survivor">Survivor</option>
+                </select>
+              </label>
+              <label>Speed
+                <input name="scratchSpeed" type="number" min="1" max="6" step="1" value="3" />
+              </label>
+              <label>Player color
+                <input name="scratchPlayerColor" type="color" value="#7be0a4" />
+              </label>
+              <label>Enemy color
+                <input name="scratchEnemyColor" type="color" value="#4f8f68" />
+              </label>
+              <label>Background
+                <input name="scratchBgColor" type="color" value="#08110d" />
+              </label>
+            </div>
+          </div>
+
+          <div data-code-settings hidden>
+            <label for="game-code">Code (HTML with optional JS)</label>
+            <textarea id="game-code" name="codeContent" rows="10" placeholder="<html><body><canvas id='c'></canvas><script>/* your game */</script></body></html>"></textarea>
+          </div>
+
+          <button class="btn" type="submit">Publish Game</button>
+        </form>
+        <p class="shop-message" data-game-creator-message aria-live="polite"></p>
+
+        <div class="dashboard-actions">
+          <a class="btn btn-ghost" href="/dashboard">Back to hub</a>
+          <a class="btn" href="/leaderboard">Leaderboard</a>
+          <button class="btn" type="button" data-logout>Log out</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js" defer></script>
+    <script src="/skins.js" defer></script>
+  </body>
+</html>

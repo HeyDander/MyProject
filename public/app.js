@@ -469,6 +469,92 @@ function initLastGameResume() {
   window.location.replace(target);
 }
 
+async function initUserGames() {
+  const list = document.querySelector("[data-user-games-list]");
+  if (!list) return;
+
+  try {
+    const data = await requestJson("/api/user-games", { method: "GET" });
+    const games = Array.isArray(data.games) ? data.games.slice(0, 12) : [];
+    if (!games.length) {
+      list.innerHTML = '<p class="hub-muted">No community games yet.</p>';
+      return;
+    }
+    list.innerHTML = games
+      .map(
+        (g) =>
+          `<p class="hub-row"><span>${g.title} <small>(${g.kind})</small></span><a class="btn btn-ghost" href="/ugc/${g.slug}">Play</a></p>`
+      )
+      .join("");
+  } catch (_error) {
+    list.innerHTML = '<p class="hub-muted">Failed to load community games.</p>';
+  }
+}
+
+function initGameCreatorForm() {
+  const form = document.querySelector("[data-game-creator-form]");
+  if (!form) return;
+  const kindSelect = form.querySelector("[data-game-kind]");
+  const scratchWrap = form.querySelector("[data-scratch-settings]");
+  const codeWrap = form.querySelector("[data-code-settings]");
+  const message = document.querySelector("[data-game-creator-message]");
+
+  const syncKind = () => {
+    const kind = String(kindSelect?.value || "scratch");
+    if (scratchWrap) scratchWrap.hidden = kind !== "scratch";
+    if (codeWrap) codeWrap.hidden = kind !== "code";
+  };
+  syncKind();
+  if (kindSelect) kindSelect.addEventListener("change", syncKind);
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (message) {
+      message.textContent = "";
+      message.classList.remove("is-error", "is-success");
+    }
+    const fd = new FormData(form);
+    const kind = String(fd.get("kind") || "scratch");
+    const payload = {
+      title: String(fd.get("title") || ""),
+      description: String(fd.get("description") || ""),
+      kind,
+    };
+    if (kind === "code") {
+      payload.codeContent = String(fd.get("codeContent") || "");
+    } else {
+      payload.scratch = {
+        mode: String(fd.get("scratchMode") || "dodger"),
+        speed: Number(fd.get("scratchSpeed") || 3),
+        playerColor: String(fd.get("scratchPlayerColor") || "#7be0a4"),
+        enemyColor: String(fd.get("scratchEnemyColor") || "#4f8f68"),
+        bgColor: String(fd.get("scratchBgColor") || "#08110d"),
+      };
+    }
+
+    try {
+      const result = await requestJson("/api/user-games/create", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      if (message) {
+        message.textContent = "Game published.";
+        message.classList.add("is-success");
+      }
+      if (result.slug) {
+        setTimeout(() => {
+          window.location.href = `/ugc/${result.slug}`;
+        }, 500);
+      }
+    } catch (error) {
+      if (message) {
+        message.textContent = error.message || "Failed to publish game.";
+        message.classList.add("is-error");
+      }
+    }
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   initAuthForm();
   initPasswordToggles();
@@ -480,4 +566,6 @@ document.addEventListener("DOMContentLoaded", () => {
   initWatermark();
   initMobileGamepad();
   initLastGameResume();
+  initUserGames();
+  initGameCreatorForm();
 });
