@@ -26,12 +26,59 @@ function buildCodeSrcdoc(rawCode) {
       html, body { margin: 0; width: 100%; height: 100%; background: #08110d; overflow: hidden; }
       #game-root { width: 100%; height: 100%; display: grid; place-items: center; color: #d8eddf; font-family: sans-serif; }
       canvas { max-width: 100%; max-height: 100%; border: 1px solid #305640; background: #0b130f; }
+      #runtime-error {
+        position: fixed;
+        left: 10px;
+        right: 10px;
+        bottom: 10px;
+        z-index: 99;
+        background: rgba(35, 8, 8, 0.92);
+        color: #ffd4d4;
+        border: 1px solid rgba(255, 120, 120, 0.45);
+        border-radius: 10px;
+        padding: 10px;
+        font: 13px/1.4 sans-serif;
+        display: none;
+        white-space: pre-wrap;
+      }
     </style>
   </head>
   <body>
     <div id="game-root"></div>
+    <div id="runtime-error"></div>
     <script>
+      (function () {
+        const root = document.getElementById("game-root");
+        const errorBox = document.getElementById("runtime-error");
+        function showError(text) {
+          errorBox.style.display = "block";
+          errorBox.textContent = String(text || "Runtime error");
+        }
+        window.addEventListener("error", function (event) {
+          showError(event && event.message ? event.message : "Script error");
+        });
+        window.addEventListener("unhandledrejection", function (event) {
+          const reason = event && event.reason ? event.reason : "Promise rejection";
+          showError(reason && reason.message ? reason.message : String(reason));
+        });
+
+        try {
 ${escaped}
+        } catch (err) {
+          showError(err && err.message ? err.message : String(err));
+        }
+
+        setTimeout(function () {
+          const hasVisibleOutput =
+            !!root.querySelector("canvas, svg, button, iframe") ||
+            (root.textContent || "").trim().length > 0;
+          if (!hasVisibleOutput && errorBox.style.display === "none") {
+            showError(
+              "Your code ran but did not render UI. Add elements to #game-root or create a canvas."
+            );
+          }
+        }, 350);
+      })();
     </script>
   </body>
 </html>`;
