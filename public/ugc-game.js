@@ -8,6 +8,35 @@ function slugFromPath() {
   return parts[parts.length - 1] || "";
 }
 
+function buildCodeSrcdoc(rawCode) {
+  const source = String(rawCode || "").trim();
+  const hasHtmlTags = /<\s*(html|body|script|canvas|div|style)\b/i.test(source);
+  if (hasHtmlTags) return source;
+
+  // If user entered plain JS, execute it inside a minimal game shell.
+  const escaped = source
+    .replace(/<\/script/gi, "<\\/script")
+    .replace(/<!--/g, "<\\!--");
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      html, body { margin: 0; width: 100%; height: 100%; background: #08110d; overflow: hidden; }
+      #game-root { width: 100%; height: 100%; display: grid; place-items: center; color: #d8eddf; font-family: sans-serif; }
+      canvas { max-width: 100%; max-height: 100%; border: 1px solid #305640; background: #0b130f; }
+    </style>
+  </head>
+  <body>
+    <div id="game-root"></div>
+    <script>
+${escaped}
+    </script>
+  </body>
+</html>`;
+}
+
 function spawnScratchGame(config) {
   const canvas = document.createElement("canvas");
   canvas.className = "arcade-board";
@@ -136,7 +165,7 @@ async function init() {
       iframe.className = "ugc-frame";
       iframe.sandbox = "allow-scripts";
       iframe.referrerPolicy = "no-referrer";
-      iframe.srcdoc = game.codeContent;
+      iframe.srcdoc = buildCodeSrcdoc(game.codeContent);
       stageEl.replaceChildren(iframe);
     } else {
       spawnScratchGame(game.scratch || {});
