@@ -395,6 +395,26 @@ button:active {
   font-size: clamp(2rem, 4vw, 2.8rem);
 }
 
+.hub-hero {
+  display: grid;
+  grid-template-columns: 1.25fr 0.75fr;
+  gap: 16px;
+  margin: 0 0 18px;
+}
+
+.hub-hero-main {
+  border: 1px solid rgba(116, 167, 139, 0.3);
+  border-radius: 18px;
+  padding: 16px;
+  background:
+    radial-gradient(140% 120% at 0% 0%, rgba(80, 161, 113, 0.16) 0%, transparent 58%),
+    rgba(9, 18, 13, 0.8);
+}
+
+.hub-hero-main .card-subtitle {
+  margin-bottom: 14px;
+}
+
 .game-grid {
   display: grid;
   gap: 14px;
@@ -403,12 +423,21 @@ button:active {
 }
 
 .game-item {
-  border: 1px solid rgba(107, 145, 124, 0.3);
-  background: rgba(11, 20, 15, 0.76);
+  border: 1px solid rgba(107, 145, 124, 0.38);
+  background:
+    radial-gradient(120% 100% at 0% 0%, rgba(67, 138, 98, 0.16) 0%, transparent 55%),
+    rgba(11, 20, 15, 0.82);
   border-radius: 16px;
   padding: 16px;
   display: grid;
   gap: 12px;
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.game-item:hover {
+  transform: translateY(-3px);
+  border-color: rgba(147, 210, 177, 0.55);
+  box-shadow: 0 14px 30px rgba(5, 11, 8, 0.46);
 }
 
 .game-item h2 {
@@ -420,6 +449,56 @@ button:active {
   margin: 0;
   color: var(--text-muted);
   min-height: 2.8em;
+}
+
+.game-tag {
+  margin: 0;
+  justify-self: start;
+  border: 1px solid rgba(145, 204, 173, 0.45);
+  color: #d2ebdc;
+  background: rgba(31, 72, 52, 0.52);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 800;
+}
+
+.game-tone-snake {
+  background:
+    radial-gradient(130% 100% at 0% 0%, rgba(95, 181, 126, 0.2) 0%, transparent 56%),
+    rgba(11, 20, 15, 0.82);
+}
+
+.game-tone-shooter {
+  background:
+    radial-gradient(130% 100% at 0% 0%, rgba(96, 166, 205, 0.2) 0%, transparent 56%),
+    rgba(11, 20, 15, 0.82);
+}
+
+.game-tone-2042 {
+  background:
+    radial-gradient(130% 100% at 0% 0%, rgba(186, 154, 83, 0.2) 0%, transparent 56%),
+    rgba(11, 20, 15, 0.82);
+}
+
+.game-tone-pong {
+  background:
+    radial-gradient(130% 100% at 0% 0%, rgba(146, 124, 202, 0.2) 0%, transparent 56%),
+    rgba(11, 20, 15, 0.82);
+}
+
+.game-tone-breakout {
+  background:
+    radial-gradient(130% 100% at 0% 0%, rgba(190, 122, 104, 0.2) 0%, transparent 56%),
+    rgba(11, 20, 15, 0.82);
+}
+
+.game-tone-dodger {
+  background:
+    radial-gradient(130% 100% at 0% 0%, rgba(117, 187, 164, 0.2) 0%, transparent 56%),
+    rgba(11, 20, 15, 0.82);
 }
 
 .dashboard-actions {
@@ -899,6 +978,10 @@ button:active {
 }
 
 @media (max-width: 940px) {
+  .hub-hero {
+    grid-template-columns: 1fr;
+  }
+
   .game-grid {
     grid-template-columns: 1fr;
   }

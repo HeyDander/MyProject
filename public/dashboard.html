@@ -18,53 +18,62 @@
 
     <main class="dashboard-wrap" data-dashboard>
       <section class="dashboard-card hub-card">
-        <p class="brand-kicker">Authorized Area</p>
-        <h1>Game Hub</h1>
-        <p class="card-subtitle">Choose a game and start playing.</p>
-
-        <div class="progress-line">
-          <p>Total points: <strong data-points>0</strong></p>
-          <p>Current skin: <strong data-skin-name>Classic</strong></p>
-        </div>
-        <section class="top3-block" aria-label="Top 3 players">
-          <h2>TOP-3</h2>
-          <div class="top3-list" data-top3-list>
-            <p class="top3-empty">Loading...</p>
+        <div class="hub-hero">
+          <div class="hub-hero-main">
+            <p class="brand-kicker">Arcade Arena</p>
+            <h1>Game Hub</h1>
+            <p class="card-subtitle">Pick a mode, jump in, earn points, and unlock skins.</p>
+            <div class="progress-line">
+              <p>Total points: <strong data-points>0</strong></p>
+              <p>Current skin: <strong data-skin-name>Classic</strong></p>
+            </div>
           </div>
-        </section>
+          <section class="top3-block" aria-label="Top 3 players">
+            <h2>TOP-3</h2>
+            <div class="top3-list" data-top3-list>
+              <p class="top3-empty">Loading...</p>
+            </div>
+          </section>
+        </div>
 
         <section class="game-grid" data-games-grid aria-label="Games list">
-          <article class="game-item">
+          <article class="game-item game-tone-snake">
+            <p class="game-tag">Classic</p>
             <h2>Snake</h2>
             <p>Classic snake with score and best result tracking.</p>
             <a class="btn" href="/snake">Play Snake</a>
           </article>
 
-          <article class="game-item">
+          <article class="game-item game-tone-shooter">
+            <p class="game-tag">Action</p>
             <h2>Shooter</h2>
             <p>Shoot enemies, survive waves, and beat your record.</p>
             <a class="btn" href="/shooter">Play Shooter</a>
           </article>
 
-          <article class="game-item">
+          <article class="game-item game-tone-2042">
+            <p class="game-tag">Puzzle</p>
             <h2>2042</h2>
             <p>Slide and merge tiles. Reach 2042 score in this challenge.</p>
             <a class="btn" href="/2042">Play 2042</a>
           </article>
 
-          <article class="game-item">
+          <article class="game-item game-tone-pong">
+            <p class="game-tag">Arcade</p>
             <h2>Pong</h2>
             <p>Arcade paddle duel against AI. Score goals to win rounds.</p>
             <a class="btn" href="/pong">Play Pong</a>
           </article>
 
-          <article class="game-item">
+          <article class="game-item game-tone-breakout">
+            <p class="game-tag">Arcade</p>
             <h2>Breakout</h2>
             <p>Break all bricks, keep the ball alive, and collect points.</p>
             <a class="btn" href="/breakout">Play Breakout</a>
           </article>
 
-          <article class="game-item">
+          <article class="game-item game-tone-dodger">
+            <p class="game-tag">Survival</p>
             <h2>Dodger</h2>
             <p>Dodge falling blocks as long as possible. Survival challenge.</p>
             <a class="btn" href="/dodger">Play Dodger</a>
