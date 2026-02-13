@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Game Hub Mobile",
+    "slug": "game-hub-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "userInterfaceStyle": "dark",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0b130f"
+      }
+    },
+    "plugins": [
+      "expo-asset"
+    ]
+  }
+}

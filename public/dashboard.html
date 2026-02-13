@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Game Hub</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="dashboard-body">
+    <div class="bg-orb orb-a" aria-hidden="true"></div>
+    <div class="bg-orb orb-b" aria-hidden="true"></div>
+
+    <main class="dashboard-wrap" data-dashboard>
+      <section class="dashboard-card hub-card">
+        <p class="brand-kicker">Authorized Area</p>
+        <h1>Game Hub</h1>
+        <p class="card-subtitle">Choose a game and start playing.</p>
+
+        <div class="progress-line">
+          <p>Total points: <strong data-points>0</strong></p>
+          <p>Current skin: <strong data-skin-name>Classic</strong></p>
+        </div>
+        <section class="top3-block" aria-label="Top 3 players">
+          <h2>TOP-3</h2>
+          <div class="top3-list" data-top3-list>
+            <p class="top3-empty">Loading...</p>
+          </div>
+        </section>
+
+        <section class="game-grid" data-games-grid aria-label="Games list">
+          <article class="game-item">
+            <h2>Snake</h2>
+            <p>Classic snake with score and best result tracking.</p>
+            <a class="btn" href="/snake">Play Snake</a>
+          </article>
+
+          <article class="game-item">
+            <h2>Shooter</h2>
+            <p>Shoot enemies, survive waves, and beat your record.</p>
+            <a class="btn" href="/shooter">Play Shooter</a>
+          </article>
+
+          <article class="game-item">
+            <h2>2042</h2>
+            <p>Slide and merge tiles. Reach 2042 score in this challenge.</p>
+            <a class="btn" href="/2042">Play 2042</a>
+          </article>
+
+          <article class="game-item">
+            <h2>Pong</h2>
+            <p>Arcade paddle duel against AI. Score goals to win rounds.</p>
+            <a class="btn" href="/pong">Play Pong</a>
+          </article>
+
+          <article class="game-item">
+            <h2>Breakout</h2>
+            <p>Break all bricks, keep the ball alive, and collect points.</p>
+            <a class="btn" href="/breakout">Play Breakout</a>
+          </article>
+
+          <article class="game-item">
+            <h2>Dodger</h2>
+            <p>Dodge falling blocks as long as possible. Survival challenge.</p>
+            <a class="btn" href="/dodger">Play Dodger</a>
+          </article>
+
+        </section>
+
+        <div class="dashboard-actions">
+          <a class="btn" href="/shop">Open Shop</a>
+          <a class="btn" href="/inventory">Inventory</a>
+          <a class="btn" href="/creator" data-open-creator>Create Your Skin (200 points)</a>
+          <a class="btn" href="/leaderboard">Leaderboard</a>
+          <button class="btn btn-ghost" type="button" data-delete-account>Delete Account</button>
+          <a class="btn btn-ghost" href="/login">Back to login</a>
+          <button class="btn" type="button" data-logout>Log out</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js" defer></script>
+    <script src="/skins.js" defer></script>
+    <script src="/challenge-catalog.js" defer></script>
+    <script src="/dashboard-games.js" defer></script>
+  </body>
+</html>

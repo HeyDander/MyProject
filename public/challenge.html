@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Challenge</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="dashboard-body">
+    <div class="bg-orb orb-a" aria-hidden="true"></div>
+    <div class="bg-orb orb-b" aria-hidden="true"></div>
+
+    <main class="dashboard-wrap">
+      <section class="dashboard-card game-card">
+        <div class="game-head">
+          <div>
+            <p class="brand-kicker">Challenge</p>
+            <h1 data-ch-title>Game</h1>
+          </div>
+          <div class="game-meta">
+            <p>Score: <strong data-ch-score>0</strong></p>
+            <p>Best: <strong data-ch-best>0</strong></p>
+          </div>
+        </div>
+
+        <div class="progress-line">
+          <p>Total points: <strong data-points>0</strong></p>
+          <p>Current skin: <strong data-skin-name>Classic</strong></p>
+        </div>
+
+        <div class="difficulty-wrap">
+          <label for="difficulty">Difficulty</label>
+          <select id="difficulty" class="difficulty-select" data-difficulty>
+            <option value="easy">Easy</option>
+            <option value="medium" selected>Medium</option>
+            <option value="hard">Hard</option>
+            <option value="very-hard">Very Hard</option>
+          </select>
+        </div>
+
+        <canvas class="arcade-board" width="720" height="420" aria-label="Challenge board"></canvas>
+        <section class="wordle-wrap" data-wordle-wrap hidden>
+          <div class="wordle-grid" data-wordle-grid></div>
+          <form class="wordle-form" data-wordle-form>
+            <input
+              type="text"
+              maxlength="5"
+              minlength="5"
+              pattern="[a-zA-Z]{5}"
+              data-wordle-input
+              placeholder="Enter 5 letters"
+              required
+            />
+            <button class="btn" type="submit">Guess</button>
+          </form>
+          <p class="card-subtitle game-help" data-wordle-status>Guess the 5-letter word.</p>
+        </section>
+        <p class="card-subtitle game-help" data-ch-desc>Loading challenge...</p>
+
+        <div class="skin-shop" data-skin-shop data-shop-mode="owned"></div>
+        <p class="shop-message" data-shop-message aria-live="polite"></p>
+
+        <div class="dashboard-actions">
+          <a class="btn btn-ghost" href="/dashboard">Back to hub</a>
+          <button class="btn" type="button" data-restart-ch>Restart</button>
+          <button class="btn" type="button" data-logout>Log out</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js" defer></script>
+    <script src="/skins.js" defer></script>
+    <script src="/challenge-catalog.js" defer></script>
+    <script src="/challenge.js" defer></script>
+  </body>
+</html>

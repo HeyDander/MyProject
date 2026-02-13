@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Breakout</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="dashboard-body">
+    <div class="bg-orb orb-a" aria-hidden="true"></div>
+    <div class="bg-orb orb-b" aria-hidden="true"></div>
+
+    <main class="dashboard-wrap">
+      <section class="dashboard-card game-card">
+        <div class="game-head">
+          <div>
+            <p class="brand-kicker">Game</p>
+            <h1>Breakout</h1>
+          </div>
+          <div class="game-meta">
+            <p>Score: <strong data-breakout-score>0</strong></p>
+            <p>Lives: <strong data-breakout-lives>3</strong></p>
+          </div>
+        </div>
+
+        <div class="progress-line">
+          <p>Total points: <strong data-points>0</strong></p>
+          <p>Current skin: <strong data-skin-name>Classic</strong></p>
+        </div>
+        <div class="difficulty-wrap">
+          <label for="difficulty">Difficulty</label>
+          <select id="difficulty" class="difficulty-select" data-difficulty>
+            <option value="easy">Easy</option>
+            <option value="medium" selected>Medium</option>
+            <option value="hard">Hard</option>
+            <option value="very-hard">Very Hard</option>
+          </select>
+        </div>
+
+        <canvas class="arcade-board" width="720" height="420" aria-label="Breakout board"></canvas>
+
+        <p class="card-subtitle game-help">Drag on the board to move paddle. Break all bricks.</p>
+        <div class="skin-shop" data-skin-shop data-shop-mode="owned"></div>
+        <p class="shop-message" data-shop-message aria-live="polite"></p>
+
+        <div class="dashboard-actions">
+          <a class="btn btn-ghost" href="/dashboard">Back to hub</a>
+          <button class="btn" type="button" data-restart-breakout>Restart</button>
+          <button class="btn" type="button" data-logout>Log out</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js" defer></script>
+    <script src="/skins.js" defer></script>
+    <script src="/breakout.js" defer></script>
+  </body>
+</html>

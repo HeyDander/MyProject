@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Create Skin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="dashboard-body">
+    <div class="bg-orb orb-a" aria-hidden="true"></div>
+    <div class="bg-orb orb-b" aria-hidden="true"></div>
+
+    <main class="dashboard-wrap">
+      <section class="dashboard-card hub-card" data-dashboard>
+        <p class="brand-kicker">Creator</p>
+        <h1>Create Your Skin</h1>
+        <p class="card-subtitle">Creator unlocks at 200 points. Skin creation is free after unlock.</p>
+
+        <div class="progress-line">
+          <p>Total points: <strong data-points>0</strong></p>
+          <p>Current skin: <strong data-skin-name>Classic</strong></p>
+        </div>
+
+        <section class="skin-shop-wrap">
+          <div class="creator-wrap">
+            <form class="creator-form" data-creator-form>
+              <label for="creator-name">Skin name</label>
+              <input id="creator-name" name="name" type="text" minlength="3" maxlength="40" required />
+
+              <div class="creator-grid">
+                <label>Primary <input name="primary" type="color" value="#65d29a" /></label>
+                <label>Secondary <input name="secondary" type="color" value="#2f7e53" /></label>
+                <label>Accent <input name="accent" type="color" value="#d7ffe5" /></label>
+                <label>Tile Low <input name="tileLow" type="color" value="#285d40" /></label>
+                <label>Tile Mid <input name="tileMid" type="color" value="#3b865c" /></label>
+                <label>Tile High <input name="tileHigh" type="color" value="#57b57e" /></label>
+                <label>Tile Top <input name="tileTop" type="color" value="#88e0aa" /></label>
+              </div>
+
+              <label for="creator-price">Sell price (0 = not for sale)</label>
+              <input id="creator-price" name="listPrice" type="number" min="0" max="50000" step="1" value="250" />
+
+              <button class="btn" type="submit">Create and Publish</button>
+            </form>
+          </div>
+          <p class="shop-message" data-shop-message aria-live="polite"></p>
+        </section>
+
+        <div class="dashboard-actions">
+          <a class="btn btn-ghost" href="/dashboard">Back to hub</a>
+          <a class="btn" href="/shop">Open Shop</a>
+          <button class="btn" type="button" data-logout>Log out</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js" defer></script>
+    <script src="/skins.js" defer></script>
+  </body>
+</html>

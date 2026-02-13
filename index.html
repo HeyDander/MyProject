@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Account Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="bg-orb orb-a" aria-hidden="true"></div>
+    <div class="bg-orb orb-b" aria-hidden="true"></div>
+
+    <main class="login-layout">
+      <section class="brand-panel">
+        <p class="brand-kicker">Secure Access</p>
+        <h1>Welcome back</h1>
+        <p class="brand-text">
+          Sign in to continue with your files and personalized workspace
+          settings.
+        </p>
+      </section>
+
+      <section class="login-card" aria-label="Login form">
+        <h2>Login</h2>
+        <p class="card-subtitle">Enter your account credentials</p>
+
+        <form class="login-form" action="#" method="post">
+          <label for="email">Email</label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            placeholder="you@example.com"
+            required
+          />
+
+          <label for="password">Password</label>
+          <input
+            type="password"
+            id="password"
+            name="password"
+            placeholder="••••••••"
+            required
+          />
+
+          <div class="form-meta">
+            <label class="remember">
+              <input type="checkbox" name="remember" />
+              Remember me
+            </label>
+            <a href="#">Forgot password?</a>
+          </div>
+
+          <button type="submit">Sign in</button>
+        </form>
+
+        <p class="signup-text">
+          Don't have an account? <a href="#">Create one</a>
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

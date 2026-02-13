@@ -1,0 +1,26 @@
+{
+  "name": "my-login",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "node --watch server.js",
+    "start": "node server.js",
+    "mobile:install": "npm --prefix mobile-app install",
+    "mobile:start": "npm --prefix mobile-app run start",
+    "mobile:android": "npm --prefix mobile-app run android",
+    "mobile:ios": "npm --prefix mobile-app run ios"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.6.2",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "nodemailer": "^8.0.1"
+  }
+}

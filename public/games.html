@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Arcade Games</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="dashboard-body">
+    <div class="bg-orb orb-a" aria-hidden="true"></div>
+    <div class="bg-orb orb-b" aria-hidden="true"></div>
+
+    <main class="dashboard-wrap" data-dashboard>
+      <section class="dashboard-card hub-card">
+        <p class="brand-kicker">Arcade</p>
+        <h1>40 Separate Games</h1>
+        <p class="card-subtitle">Pick any game from the list and play.</p>
+
+        <p class="account-pill" data-user-email>Loading...</p>
+        <div class="progress-line">
+          <p>Total points: <strong data-points>0</strong></p>
+          <p>Current skin: <strong data-skin-name>Classic</strong></p>
+        </div>
+
+        <section class="game-grid" data-games-list aria-label="40 games list"></section>
+
+        <div class="dashboard-actions">
+          <a class="btn btn-ghost" href="/dashboard">Back to hub</a>
+          <a class="btn" href="/shop">Open Shop</a>
+          <a class="btn" href="/leaderboard">Leaderboard</a>
+          <button class="btn" type="button" data-logout>Log out</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js" defer></script>
+    <script src="/skins.js" defer></script>
+    <script src="/challenge-catalog.js" defer></script>
+    <script src="/games.js" defer></script>
+  </body>
+</html>

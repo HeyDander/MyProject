@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Inventory</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="dashboard-body">
+    <div class="bg-orb orb-a" aria-hidden="true"></div>
+    <div class="bg-orb orb-b" aria-hidden="true"></div>
+
+    <main class="dashboard-wrap">
+      <section class="dashboard-card hub-card" data-dashboard>
+        <p class="brand-kicker">Inventory</p>
+        <h1>Your Skins</h1>
+        <p class="card-subtitle">Equip or remove skins from your inventory.</p>
+
+        <p class="account-pill" data-user-email>Loading...</p>
+        <div class="progress-line">
+          <p>Total points: <strong data-points>0</strong></p>
+          <p>Current skin: <strong data-skin-name>Classic</strong></p>
+        </div>
+
+        <section class="skin-shop-wrap">
+          <div class="skin-shop" data-skin-shop data-shop-mode="owned"></div>
+          <p class="shop-message" data-shop-message aria-live="polite"></p>
+        </section>
+
+        <div class="dashboard-actions">
+          <a class="btn btn-ghost" href="/dashboard">Back to hub</a>
+          <a class="btn" href="/shop">Open Shop</a>
+          <a class="btn" href="/leaderboard">Leaderboard</a>
+          <button class="btn" type="button" data-logout>Log out</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js" defer></script>
+    <script src="/skins.js" defer></script>
+  </body>
+</html>
