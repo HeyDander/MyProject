@@ -815,6 +815,21 @@ button:active {
   color: #c78652;
 }
 
+.side-watermark {
+  position: fixed;
+  right: -54px;
+  top: 50%;
+  transform: translateY(-50%) rotate(-90deg);
+  color: rgba(173, 224, 196, 0.45);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  pointer-events: none;
+  user-select: none;
+  z-index: 2;
+}
+
 @media (max-width: 940px) {
   .game-grid {
     grid-template-columns: 1fr;
@@ -857,5 +872,10 @@ button:active {
   .progress-line {
     flex-direction: column;
     gap: 8px;
+  }
+
+  .side-watermark {
+    right: -62px;
+    font-size: 0.72rem;
   }
 }

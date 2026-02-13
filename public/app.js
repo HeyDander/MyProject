@@ -184,6 +184,16 @@ function preventPageScrollKeys() {
   );
 }
 
+function initWatermark() {
+  if (document.querySelector("[data-watermark]")) return;
+  const mark = document.createElement("div");
+  mark.className = "side-watermark";
+  mark.setAttribute("data-watermark", "true");
+  mark.setAttribute("aria-hidden", "true");
+  mark.textContent = "Made by HeyDander";
+  document.body.appendChild(mark);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   initAuthForm();
   initPasswordToggles();
@@ -191,4 +201,5 @@ document.addEventListener("DOMContentLoaded", () => {
   initLogout();
   initDeleteAccount();
   preventPageScrollKeys();
+  initWatermark();
 });
