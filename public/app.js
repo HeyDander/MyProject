@@ -358,6 +358,35 @@ async function initHubExtras() {
   const friendMsg = document.querySelector("[data-friend-message]");
 
   let lastGame = "/snake";
+  const LAST_GAME_KEY = "last-game-path";
+
+  const isValidLastGamePath = (value) => {
+    const raw = String(value || "").trim();
+    if (!raw.startsWith("/")) return false;
+    let pathname = raw;
+    try {
+      const parsed = new URL(raw, window.location.origin);
+      pathname = parsed.pathname;
+    } catch (_error) {
+      pathname = raw.split("?")[0].split("#")[0];
+    }
+    return (
+      pathname === "/snake" ||
+      pathname === "/shooter" ||
+      pathname === "/2042" ||
+      pathname === "/pong" ||
+      pathname === "/pong-online" ||
+      pathname === "/breakout" ||
+      pathname === "/dodger" ||
+      pathname.startsWith("/uploaded/") ||
+      pathname.startsWith("/game/")
+    );
+  };
+
+  const readLocalLastGame = () => {
+    const stored = localStorage.getItem(LAST_GAME_KEY) || "";
+    return isValidLastGamePath(stored) ? stored : "";
+  };
 
   const renderRows = (container, rows) => {
     if (!container) return;
@@ -378,7 +407,9 @@ async function initHubExtras() {
     if (seasonLine) {
       seasonLine.textContent = `${T("Season points", "Сезонные очки")}: ${data.profile.seasonPoints} | ${T("Season rank", "Место в сезоне")}: #${data.profile.seasonRank}`;
     }
-    lastGame = data.profile.lastGame || "/snake";
+    const apiLastGame = data.profile.lastGame || "/snake";
+    const localLastGame = readLocalLastGame();
+    lastGame = localLastGame || apiLastGame || "/snake";
     if (lastGameLine) {
       lastGameLine.textContent = `${T("Last game", "Последняя игра")}: ${lastGame}`;
     }
@@ -455,7 +486,8 @@ async function initHubExtras() {
 
   if (continueBtn) {
     continueBtn.addEventListener("click", () => {
-      window.location.href = lastGame || "/snake";
+      const freshLocal = readLocalLastGame();
+      window.location.href = freshLocal || lastGame || "/snake";
     });
   }
 
@@ -912,6 +944,12 @@ function initLastGameResume() {
       LAST_GAME_KEY,
       `${window.location.pathname}${window.location.search}${window.location.hash}`
     );
+    requestJson("/api/progress/last-game", {
+      method: "POST",
+      body: JSON.stringify({ game: window.location.pathname }),
+    }).catch(() => {
+      // Ignore sync errors to not block gameplay.
+    });
   }
 }
 
