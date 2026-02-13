@@ -510,6 +510,72 @@ button:active {
   margin: 0 0 14px;
 }
 
+.hub-extra-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 20px;
+}
+
+.hub-extra-card {
+  border: 1px solid rgba(110, 150, 127, 0.28);
+  border-radius: 14px;
+  background: rgba(10, 18, 14, 0.74);
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.hub-extra-card h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.hub-muted {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.hub-list {
+  display: grid;
+  gap: 6px;
+}
+
+.hub-row {
+  margin: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  border-bottom: 1px solid rgba(120, 160, 138, 0.14);
+  padding: 0 0 6px;
+}
+
+.hub-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.hub-row strong {
+  color: #d6ebdd;
+}
+
+.friend-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.friend-form input {
+  border: 1px solid #355846;
+  color: #e3ece6;
+  background: var(--input-bg);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
 .skin-shop-wrap {
   margin: 0 0 20px;
 }
@@ -983,6 +1049,10 @@ button:active {
   }
 
   .game-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hub-extra-grid {
     grid-template-columns: 1fr;
   }
 

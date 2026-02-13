@@ -81,6 +81,57 @@
 
         </section>
 
+        <section class="hub-extra-grid" data-hub-extras>
+          <article class="hub-extra-card">
+            <h2>Player Profile</h2>
+            <p class="hub-muted" data-profile-line>Loading profile...</p>
+            <p class="hub-muted" data-season-line></p>
+            <p class="hub-muted" data-last-game-line></p>
+            <button class="btn btn-ghost" type="button" data-continue-last>Continue Last Game</button>
+          </article>
+
+          <article class="hub-extra-card">
+            <h2>Daily Missions</h2>
+            <div class="hub-list" data-missions-list>
+              <p class="hub-muted">Loading missions...</p>
+            </div>
+          </article>
+
+          <article class="hub-extra-card">
+            <h2>Achievements</h2>
+            <div class="hub-list" data-achievements-list>
+              <p class="hub-muted">Loading achievements...</p>
+            </div>
+          </article>
+
+          <article class="hub-extra-card">
+            <h2>Live Event</h2>
+            <p class="hub-muted" data-event-title>Loading event...</p>
+            <p class="hub-muted" data-event-desc></p>
+            <button class="btn" type="button" data-share-card>Copy Share Card</button>
+            <p class="shop-message" data-share-message aria-live="polite"></p>
+          </article>
+
+          <article class="hub-extra-card">
+            <h2>Friends League</h2>
+            <form class="friend-form" data-friend-form>
+              <input
+                type="text"
+                name="username"
+                placeholder="Friend username"
+                minlength="3"
+                maxlength="24"
+                required
+              />
+              <button class="btn" type="submit">Add friend</button>
+            </form>
+            <div class="hub-list" data-friends-list>
+              <p class="hub-muted">No friends yet.</p>
+            </div>
+            <p class="shop-message" data-friend-message aria-live="polite"></p>
+          </article>
+        </section>
+
         <div class="dashboard-actions">
           <a class="btn" href="/shop">Open Shop</a>
           <a class="btn" href="/inventory">Inventory</a>

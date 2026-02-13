@@ -13,6 +13,20 @@ const MAX_CHALLENGE_GAMES = 10;
 const MAX_SKINS = 50;
 const CUSTOM_SKIN_ID_PREFIX = "custom-";
 const CREATOR_UNLOCK_POINTS = 200;
+const DAILY_MISSIONS = [
+  { id: "daily_points_120", label: "Earn 120 points today", type: "day_points", target: 120 },
+  { id: "daily_points_260", label: "Earn 260 points today", type: "day_points", target: 260 },
+  { id: "daily_buy_skin", label: "Buy 1 skin today", type: "day_buys", target: 1 },
+  { id: "daily_streak_3", label: "Reach 3-day streak", type: "streak", target: 3 },
+  { id: "daily_streak_7", label: "Reach 7-day streak", type: "streak", target: 7 },
+];
+const ACHIEVEMENTS = [
+  { id: "ach_first_100", title: "First 100", type: "points", target: 100 },
+  { id: "ach_grinder_1000", title: "Grinder", type: "points", target: 1000 },
+  { id: "ach_skin_collector", title: "Skin Collector", type: "skins_bought", target: 5 },
+  { id: "ach_streak_7", title: "7-day streak", type: "streak", target: 7 },
+  { id: "ach_season_500", title: "Season 500", type: "season_points", target: 500 },
+];
 const SKIN_CATALOG = {
   "classic": { cost: 0 },
   "ember": { cost: 80 },
@@ -162,6 +176,86 @@ async function dbAll(text, params = []) {
   return result.rows;
 }
 
+async function ensureColumn(tableName, columnName, sqlTypeAndDefault) {
+  const exists = await dbGet(
+    `
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2
+    `,
+    [tableName, columnName]
+  );
+  if (exists) return;
+  await dbQuery(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${sqlTypeAndDefault}`);
+}
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function yesterdayKey() {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+function seasonKey() {
+  return new Date().toISOString().slice(0, 7);
+}
+
+function missionSetForToday() {
+  const key = Number(todayKey().replace(/-/g, ""));
+  const list = [...DAILY_MISSIONS];
+  const picked = [];
+  let x = key || 1;
+  while (picked.length < 3 && list.length) {
+    x = (x * 1103515245 + 12345) >>> 0;
+    picked.push(list.splice(x % list.length, 1)[0]);
+  }
+  return picked;
+}
+
+function currentEvent() {
+  const now = new Date();
+  const day = now.getUTCDay();
+  const isWeekend = day === 0 || day === 6;
+  if (isWeekend) {
+    return {
+      title: "Double Points Weekend",
+      description: "All earned points count x2 on weekends.",
+      multiplier: 2,
+    };
+  }
+  return {
+    title: "Midweek Rush",
+    description: "Keep your streak active and unlock mission bonuses.",
+    multiplier: 1,
+  };
+}
+
+async function unlockAchievements(userId, progress) {
+  const unlocked = [];
+  for (const ach of ACHIEVEMENTS) {
+    let value = 0;
+    if (ach.type === "points") value = Number(progress.points || 0);
+    if (ach.type === "season_points") value = Number(progress.seasonPoints || 0);
+    if (ach.type === "streak") value = Number(progress.dailyStreak || 0);
+    if (ach.type === "skins_bought") value = Number(progress.skinsBought || 0);
+    if (value < ach.target) continue;
+    const row = await dbGet(
+      "SELECT 1 FROM user_achievements WHERE user_id = $1 AND badge_id = $2",
+      [userId, ach.id]
+    );
+    if (row) continue;
+    await dbQuery(
+      "INSERT INTO user_achievements (user_id, badge_id, unlocked_at) VALUES ($1, $2, NOW())",
+      [userId, ach.id]
+    );
+    unlocked.push(ach.id);
+  }
+  return unlocked;
+}
+
 async function initDatabase() {
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS users (
@@ -183,6 +277,15 @@ async function initDatabase() {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  await ensureColumn("user_progress", "season_key", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn("user_progress", "season_points", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn("user_progress", "last_seen_day", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn("user_progress", "daily_streak", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn("user_progress", "day_key", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn("user_progress", "day_points", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn("user_progress", "day_buys", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn("user_progress", "skins_bought", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn("user_progress", "last_game", "TEXT NOT NULL DEFAULT ''");
 
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS email_verifications (
@@ -203,6 +306,23 @@ async function initDatabase() {
       list_price INTEGER NOT NULL DEFAULT 0,
       is_listed BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await dbQuery(`
+    CREATE TABLE IF NOT EXISTS user_achievements (
+      user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      badge_id TEXT NOT NULL,
+      unlocked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (user_id, badge_id)
+    )
+  `);
+  await dbQuery(`
+    CREATE TABLE IF NOT EXISTS friend_links (
+      user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      friend_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (user_id, friend_user_id),
+      CHECK (user_id <> friend_user_id)
     )
   `);
 
@@ -402,23 +522,89 @@ async function skinExists(skinId) {
 
 async function ensureProgress(userId) {
   const row = await dbGet(
-    "SELECT user_id, points, owned_skins, selected_skin FROM user_progress WHERE user_id = $1",
+    `
+    SELECT
+      user_id, points, owned_skins, selected_skin,
+      season_key, season_points, last_seen_day, daily_streak,
+      day_key, day_points, day_buys, skins_bought, last_game
+    FROM user_progress
+    WHERE user_id = $1
+    `,
     [userId]
   );
 
   if (row) {
     const ownedSkins = await normalizeSkins(row.owned_skins);
     let selectedSkin = row.selected_skin;
+    let nextSeasonKey = row.season_key || seasonKey();
+    let nextSeasonPoints = Number(row.season_points || 0);
+    let nextSeenDay = row.last_seen_day || "";
+    let nextStreak = Number(row.daily_streak || 0);
+    let nextDayKey = row.day_key || todayKey();
+    let nextDayPoints = Number(row.day_points || 0);
+    let nextDayBuys = Number(row.day_buys || 0);
+
+    const today = todayKey();
+    const yesterday = yesterdayKey();
+    const season = seasonKey();
+
+    if (nextSeasonKey !== season) {
+      nextSeasonKey = season;
+      nextSeasonPoints = 0;
+    }
+    if (nextSeenDay !== today) {
+      nextStreak = nextSeenDay === yesterday ? nextStreak + 1 : 1;
+      nextSeenDay = today;
+    }
+    if (nextDayKey !== today) {
+      nextDayKey = today;
+      nextDayPoints = 0;
+      nextDayBuys = 0;
+    }
+
     if (!ownedSkins.includes(selectedSkin)) {
       selectedSkin = "classic";
     }
-    if (
+    const needWrite =
       JSON.stringify(ownedSkins) !== row.owned_skins ||
-      selectedSkin !== row.selected_skin
-    ) {
+      selectedSkin !== row.selected_skin ||
+      nextSeasonKey !== row.season_key ||
+      nextSeasonPoints !== Number(row.season_points || 0) ||
+      nextSeenDay !== (row.last_seen_day || "") ||
+      nextStreak !== Number(row.daily_streak || 0) ||
+      nextDayKey !== (row.day_key || "") ||
+      nextDayPoints !== Number(row.day_points || 0) ||
+      nextDayBuys !== Number(row.day_buys || 0);
+
+    if (needWrite) {
       await dbQuery(
-        "UPDATE user_progress SET owned_skins = $1, selected_skin = $2, updated_at = NOW() WHERE user_id = $3",
-        [JSON.stringify(ownedSkins), selectedSkin, userId]
+        `
+        UPDATE user_progress
+        SET
+          owned_skins = $1,
+          selected_skin = $2,
+          season_key = $3,
+          season_points = $4,
+          last_seen_day = $5,
+          daily_streak = $6,
+          day_key = $7,
+          day_points = $8,
+          day_buys = $9,
+          updated_at = NOW()
+        WHERE user_id = $10
+        `,
+        [
+          JSON.stringify(ownedSkins),
+          selectedSkin,
+          nextSeasonKey,
+          nextSeasonPoints,
+          nextSeenDay,
+          nextStreak,
+          nextDayKey,
+          nextDayPoints,
+          nextDayBuys,
+          userId,
+        ]
       );
     }
 
@@ -427,12 +613,30 @@ async function ensureProgress(userId) {
       points: row.points,
       ownedSkins,
       selectedSkin,
+      seasonKey: nextSeasonKey,
+      seasonPoints: nextSeasonPoints,
+      dailyStreak: nextStreak,
+      dayKey: nextDayKey,
+      dayPoints: nextDayPoints,
+      dayBuys: nextDayBuys,
+      skinsBought: Number(row.skins_bought || 0),
+      lastGame: row.last_game || "",
     };
   }
 
+  const today = todayKey();
+  const season = seasonKey();
   await dbQuery(
-    "INSERT INTO user_progress (user_id, points, owned_skins, selected_skin) VALUES ($1, 0, $2, $3) ON CONFLICT (user_id) DO NOTHING",
-    [userId, JSON.stringify(["classic"]), "classic"]
+    `
+    INSERT INTO user_progress (
+      user_id, points, owned_skins, selected_skin,
+      season_key, season_points, last_seen_day, daily_streak,
+      day_key, day_points, day_buys, skins_bought, last_game
+    )
+    VALUES ($1, 0, $2, $3, $4, 0, $5, 1, $5, 0, 0, 0, '')
+    ON CONFLICT (user_id) DO NOTHING
+    `,
+    [userId, JSON.stringify(["classic"]), "classic", season, today]
   );
 
   return {
@@ -440,6 +644,14 @@ async function ensureProgress(userId) {
     points: 0,
     ownedSkins: ["classic"],
     selectedSkin: "classic",
+    seasonKey: season,
+    seasonPoints: 0,
+    dailyStreak: 1,
+    dayKey: today,
+    dayPoints: 0,
+    dayBuys: 0,
+    skinsBought: 0,
+    lastGame: "",
   };
 }
 
@@ -637,6 +849,119 @@ app.get("/api/leaderboard", async (req, res) => {
   });
 });
 
+app.get("/api/player/home", async (req, res) => {
+  if (!isAuthed(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const meUser = await dbGet(
+    "SELECT id, username, email_verified FROM users WHERE id = $1",
+    [req.session.userId]
+  );
+  if (!meUser) return res.status(404).json({ error: "User not found." });
+
+  const progress = await ensureProgress(req.session.userId);
+  await unlockAchievements(req.session.userId, progress);
+  const missions = missionSetForToday().map((mission) => {
+    let progressValue = 0;
+    if (mission.type === "day_points") progressValue = Number(progress.dayPoints || 0);
+    if (mission.type === "day_buys") progressValue = Number(progress.dayBuys || 0);
+    if (mission.type === "streak") progressValue = Number(progress.dailyStreak || 0);
+    const done = progressValue >= mission.target;
+    return {
+      id: mission.id,
+      label: mission.label,
+      progress: Math.min(progressValue, mission.target),
+      target: mission.target,
+      done,
+    };
+  });
+
+  const achievements = await dbAll(
+    "SELECT badge_id, unlocked_at FROM user_achievements WHERE user_id = $1 ORDER BY unlocked_at DESC",
+    [req.session.userId]
+  );
+  const unlockedSet = new Set(achievements.map((a) => String(a.badge_id)));
+  const allAchievementCards = ACHIEVEMENTS.map((a) => ({
+    id: a.id,
+    title: a.title,
+    unlocked: unlockedSet.has(a.id),
+  }));
+
+  const seasonRankRow = await dbGet(
+    `
+    SELECT COUNT(*) + 1 AS rank
+    FROM user_progress up
+    JOIN users u ON u.id = up.user_id
+    WHERE u.email_verified = TRUE
+      AND (up.season_points > $1 OR (up.season_points = $1 AND u.id < $2))
+    `,
+    [progress.seasonPoints, req.session.userId]
+  );
+
+  const friendsTop = await dbAll(
+    `
+    SELECT u.username, up.season_points, up.points
+    FROM user_progress up
+    JOIN users u ON u.id = up.user_id
+    WHERE up.user_id IN (
+      SELECT friend_user_id FROM friend_links WHERE user_id = $1
+      UNION
+      SELECT $1
+    )
+    ORDER BY up.season_points DESC, u.id ASC
+    LIMIT 10
+    `,
+    [req.session.userId]
+  );
+
+  const event = currentEvent();
+  return res.json({
+    profile: {
+      username: meUser.username || `player-${req.session.userId}`,
+      points: Number(progress.points || 0),
+      seasonPoints: Number(progress.seasonPoints || 0),
+      dailyStreak: Number(progress.dailyStreak || 0),
+      seasonRank: Number(seasonRankRow?.rank || 0),
+      lastGame: progress.lastGame || "/snake",
+    },
+    missions,
+    achievements: allAchievementCards,
+    event,
+    friendsTop,
+    shareText: `Player ${meUser.username || `player-${req.session.userId}`} | Season points: ${Number(progress.seasonPoints || 0)} | Total points: ${Number(progress.points || 0)}`,
+  });
+});
+
+app.post("/api/friends/add", async (req, res) => {
+  if (!isAuthed(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const username = normalizeUsername(req.body.username);
+  if (!username || username.length < 3) {
+    return res.status(400).json({ error: "Enter a valid username." });
+  }
+
+  const target = await dbGet(
+    "SELECT id, username FROM users WHERE lower(username) = lower($1)",
+    [username]
+  );
+  if (!target) {
+    return res.status(404).json({ error: "Player not found." });
+  }
+  if (Number(target.id) === Number(req.session.userId)) {
+    return res.status(400).json({ error: "You cannot add yourself." });
+  }
+
+  await dbQuery(
+    "INSERT INTO friend_links (user_id, friend_user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+    [req.session.userId, target.id]
+  );
+
+  return res.json({ ok: true });
+});
+
 app.get("/api/progress", async (req, res) => {
   if (!isAuthed(req)) {
     return res.status(401).json({ error: "Unauthorized" });
@@ -670,6 +995,8 @@ app.get("/api/progress", async (req, res) => {
     .filter(Boolean);
   return res.json({
     points: progress.points,
+    seasonPoints: progress.seasonPoints,
+    dailyStreak: progress.dailyStreak,
     ownedSkins: progress.ownedSkins,
     selectedSkin: progress.selectedSkin,
     skinCatalog: [...baseCatalog, ...customCatalog],
@@ -682,19 +1009,39 @@ app.post("/api/progress/add", async (req, res) => {
   }
 
   const points = Number(req.body.points);
+  const gamePath = String(req.body.game || "").slice(0, 64);
   if (!Number.isInteger(points) || points <= 0 || points > 10000) {
     return res.status(400).json({ error: "Invalid points value." });
   }
 
   const progress = await ensureProgress(req.session.userId);
-  const nextPoints = progress.points + points;
+  const event = currentEvent();
+  const awarded = points * Number(event.multiplier || 1);
+  const nextPoints = progress.points + awarded;
+  const nextSeasonPoints = progress.seasonPoints + awarded;
+  const nextDayPoints = progress.dayPoints + awarded;
 
-  await dbQuery("UPDATE user_progress SET points = $1, updated_at = NOW() WHERE user_id = $2", [
-    nextPoints,
-    req.session.userId,
-  ]);
+  await dbQuery(
+    `
+    UPDATE user_progress
+    SET points = $1, season_points = $2, day_points = $3, last_game = $4, updated_at = NOW()
+    WHERE user_id = $5
+    `,
+    [nextPoints, nextSeasonPoints, nextDayPoints, gamePath || progress.lastGame || "", req.session.userId]
+  );
+  await unlockAchievements(req.session.userId, {
+    ...progress,
+    points: nextPoints,
+    seasonPoints: nextSeasonPoints,
+    dayPoints: nextDayPoints,
+  });
 
-  return res.json({ ok: true, points: nextPoints });
+  return res.json({
+    ok: true,
+    points: nextPoints,
+    seasonPoints: nextSeasonPoints,
+    multiplier: Number(event.multiplier || 1),
+  });
 });
 
 app.post("/api/progress/buy", async (req, res) => {
@@ -738,9 +1085,14 @@ app.post("/api/progress/buy", async (req, res) => {
   const nextOwnedSkins = [...progress.ownedSkins, skinId];
 
   await dbQuery(
-    "UPDATE user_progress SET points = $1, owned_skins = $2, updated_at = NOW() WHERE user_id = $3",
+    "UPDATE user_progress SET points = $1, owned_skins = $2, day_buys = day_buys + 1, skins_bought = skins_bought + 1, updated_at = NOW() WHERE user_id = $3",
     [nextPoints, JSON.stringify(nextOwnedSkins), req.session.userId]
   );
+  await unlockAchievements(req.session.userId, {
+    ...progress,
+    points: nextPoints,
+    skinsBought: Number(progress.skinsBought || 0) + 1,
+  });
   if (customSkin) {
     const sellerProgress = await ensureProgress(customSkin.creator_user_id);
     await dbQuery("UPDATE user_progress SET points = $1, updated_at = NOW() WHERE user_id = $2", [
@@ -752,6 +1104,7 @@ app.post("/api/progress/buy", async (req, res) => {
   return res.json({
     ok: true,
     points: nextPoints,
+    seasonPoints: progress.seasonPoints,
     ownedSkins: nextOwnedSkins,
     selectedSkin: progress.selectedSkin,
   });

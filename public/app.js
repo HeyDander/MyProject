@@ -120,6 +120,149 @@ async function initDashboard() {
   }
 }
 
+async function initHubExtras() {
+  const root = document.querySelector("[data-hub-extras]");
+  if (!root) return;
+
+  const profileLine = document.querySelector("[data-profile-line]");
+  const seasonLine = document.querySelector("[data-season-line]");
+  const lastGameLine = document.querySelector("[data-last-game-line]");
+  const missionsList = document.querySelector("[data-missions-list]");
+  const achievementsList = document.querySelector("[data-achievements-list]");
+  const eventTitle = document.querySelector("[data-event-title]");
+  const eventDesc = document.querySelector("[data-event-desc]");
+  const friendsList = document.querySelector("[data-friends-list]");
+  const shareBtn = document.querySelector("[data-share-card]");
+  const shareMsg = document.querySelector("[data-share-message]");
+  const continueBtn = document.querySelector("[data-continue-last]");
+  const friendForm = document.querySelector("[data-friend-form]");
+  const friendMsg = document.querySelector("[data-friend-message]");
+
+  let shareText = "";
+  let lastGame = "/snake";
+
+  const renderRows = (container, rows) => {
+    if (!container) return;
+    if (!rows.length) {
+      container.innerHTML = '<p class="hub-muted">No data yet.</p>';
+      return;
+    }
+    container.innerHTML = rows
+      .map((row) => `<p class="hub-row"><span>${row.left}</span><strong>${row.right}</strong></p>`)
+      .join("");
+  };
+
+  const load = async () => {
+    const data = await requestJson("/api/player/home", { method: "GET" });
+    if (profileLine) {
+      profileLine.textContent = `${data.profile.username} | Total points: ${data.profile.points} | Streak: ${data.profile.dailyStreak}`;
+    }
+    if (seasonLine) {
+      seasonLine.textContent = `Season points: ${data.profile.seasonPoints} | Season rank: #${data.profile.seasonRank}`;
+    }
+    lastGame = data.profile.lastGame || "/snake";
+    if (lastGameLine) {
+      lastGameLine.textContent = `Last game: ${lastGame}`;
+    }
+
+    renderRows(
+      missionsList,
+      (data.missions || []).map((m) => ({
+        left: `${m.done ? "✅" : "•"} ${m.label}`,
+        right: `${m.progress}/${m.target}`,
+      }))
+    );
+
+    renderRows(
+      achievementsList,
+      (data.achievements || []).map((a) => ({
+        left: `${a.unlocked ? "🏆" : "🔒"} ${a.title}`,
+        right: a.unlocked ? "Unlocked" : "Locked",
+      }))
+    );
+
+    if (eventTitle) eventTitle.textContent = `${data.event?.title || "Event"}`;
+    if (eventDesc) eventDesc.textContent = `${data.event?.description || ""}`;
+    renderRows(
+      friendsList,
+      (data.friendsTop || []).map((f) => ({
+        left: f.username,
+        right: `${f.season_points} season`,
+      }))
+    );
+    shareText = data.shareText || "";
+  };
+
+  try {
+    await load();
+  } catch (_error) {
+    if (profileLine) profileLine.textContent = "Failed to load player data.";
+  }
+
+  if (continueBtn) {
+    continueBtn.addEventListener("click", () => {
+      window.location.href = lastGame || "/snake";
+    });
+  }
+
+  if (shareBtn) {
+    shareBtn.addEventListener("click", async () => {
+      if (!shareText) return;
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(shareText);
+        } else {
+          const ta = document.createElement("textarea");
+          ta.value = shareText;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand("copy");
+          ta.remove();
+        }
+        if (shareMsg) {
+          shareMsg.textContent = "Share card copied.";
+          shareMsg.classList.remove("is-error");
+          shareMsg.classList.add("is-success");
+        }
+      } catch (_error) {
+        if (shareMsg) {
+          shareMsg.textContent = "Failed to copy.";
+          shareMsg.classList.remove("is-success");
+          shareMsg.classList.add("is-error");
+        }
+      }
+    });
+  }
+
+  if (friendForm) {
+    friendForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const formData = new FormData(friendForm);
+      const username = String(formData.get("username") || "").trim();
+      if (!username) return;
+      try {
+        await requestJson("/api/friends/add", {
+          method: "POST",
+          body: JSON.stringify({ username }),
+        });
+        if (friendMsg) {
+          friendMsg.textContent = "Friend added.";
+          friendMsg.classList.remove("is-error");
+          friendMsg.classList.add("is-success");
+        }
+        friendForm.reset();
+        await load();
+      } catch (error) {
+        if (friendMsg) {
+          friendMsg.textContent = error.message || "Failed to add friend.";
+          friendMsg.classList.remove("is-success");
+          friendMsg.classList.add("is-error");
+        }
+      }
+    });
+  }
+}
+
 function initLogout() {
   const logoutButtons = document.querySelectorAll("[data-logout]");
   if (!logoutButtons.length) return;
@@ -330,6 +473,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initAuthForm();
   initPasswordToggles();
   initDashboard();
+  initHubExtras();
   initLogout();
   initDeleteAccount();
   preventPageScrollKeys();

@@ -479,7 +479,7 @@ function flushPoints() {
   window
     .requestJson("/api/progress/add", {
       method: "POST",
-      body: JSON.stringify({ points: pointsToSend }),
+      body: JSON.stringify({ points: pointsToSend, game: window.location.pathname }),
     })
     .then((data) => {
       skinState.points = data.points;
