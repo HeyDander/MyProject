@@ -50,6 +50,7 @@ function buildCodeSrcdoc(rawCode) {
       (function () {
         const root = document.getElementById("game-root");
         const errorBox = document.getElementById("runtime-error");
+        try { parent.postMessage({ type: "ugc-ready" }, "*"); } catch (_e) {}
         function startFallbackGame() {
           root.innerHTML = "";
           const canvas = document.createElement("canvas");
@@ -112,6 +113,7 @@ function buildCodeSrcdoc(rawCode) {
             requestAnimationFrame(loop);
           }
           loop();
+          try { parent.postMessage({ type: "ugc-fallback" }, "*"); } catch (_e) {}
         }
         function showError(text) {
           errorBox.style.display = "block";
@@ -261,6 +263,17 @@ function spawnScratchGame(config) {
   loop();
 }
 
+function spawnParentFallback() {
+  stageEl.replaceChildren();
+  spawnScratchGame({
+    mode: "dodger",
+    speed: 3,
+    playerColor: "#7be0a4",
+    enemyColor: "#4f8f68",
+    bgColor: "#08110d",
+  });
+}
+
 async function init() {
   const slug = slugFromPath();
   if (!slug) return;
@@ -279,6 +292,22 @@ async function init() {
       iframe.referrerPolicy = "no-referrer";
       iframe.srcdoc = buildCodeSrcdoc(game.codeContent);
       stageEl.replaceChildren(iframe);
+
+      let alive = false;
+      const onMsg = (event) => {
+        const data = event && event.data ? event.data : null;
+        if (!data || typeof data !== "object") return;
+        if (data.type === "ugc-ready" || data.type === "ugc-fallback") {
+          alive = true;
+        }
+      };
+      window.addEventListener("message", onMsg);
+      setTimeout(() => {
+        window.removeEventListener("message", onMsg);
+        if (!alive) {
+          spawnParentFallback();
+        }
+      }, 1200);
     } else {
       spawnScratchGame(game.scratch || {});
     }
