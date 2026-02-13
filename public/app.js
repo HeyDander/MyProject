@@ -497,15 +497,248 @@ function initGameCreatorForm() {
   const kindSelect = form.querySelector("[data-game-kind]");
   const scratchWrap = form.querySelector("[data-scratch-settings]");
   const codeWrap = form.querySelector("[data-code-settings]");
+  const scratchBlocksWrap = form.querySelector("[data-scratch-blocks]");
+  const scratchBuilder = form.querySelector("[data-scratch-builder]");
+  const previewStage = form.querySelector("[data-game-preview-stage]");
+  const previewRunBtn = form.querySelector("[data-preview-run]");
   const message = document.querySelector("[data-game-creator-message]");
+  const blockButtons = form.querySelectorAll("[data-add-block]");
+  const clearBlocksBtn = form.querySelector("[data-scratch-clear]");
+  const codeTextarea = form.querySelector('textarea[name="codeContent"]');
+  const scratchState = { blocks: [] };
+  let previewCleanup = () => {};
+
+  const BLOCK_LABELS = {
+    mode_dodger: "Set Mode: Dodger",
+    mode_collector: "Set Mode: Collector",
+    mode_survivor: "Set Mode: Survivor",
+    speed_up: "Speed +1",
+    speed_down: "Speed -1",
+    spawn_more: "Spawn More",
+    spawn_less: "Spawn Less",
+    points_up: "Points Gain +2",
+  };
+
+  const interpretBlocks = (base) => {
+    const next = { ...base, spawnScale: 1, pointBonus: 0 };
+    for (const block of scratchState.blocks) {
+      if (block === "mode_dodger") next.mode = "dodger";
+      if (block === "mode_collector") next.mode = "collector";
+      if (block === "mode_survivor") next.mode = "survivor";
+      if (block === "speed_up") next.speed = Math.min(6, next.speed + 1);
+      if (block === "speed_down") next.speed = Math.max(1, next.speed - 1);
+      if (block === "spawn_more") next.spawnScale = Math.min(2.4, next.spawnScale + 0.25);
+      if (block === "spawn_less") next.spawnScale = Math.max(0.45, next.spawnScale - 0.2);
+      if (block === "points_up") next.pointBonus += 2;
+    }
+    return next;
+  };
+
+  const renderBlocks = () => {
+    if (!scratchBlocksWrap) return;
+    if (!scratchState.blocks.length) {
+      scratchBlocksWrap.innerHTML = '<p class="hub-muted">Add blocks from palette.</p>';
+      return;
+    }
+    scratchBlocksWrap.innerHTML = "";
+    scratchState.blocks.forEach((block, index) => {
+      const row = document.createElement("div");
+      row.className = "scratch-block";
+      const label = document.createElement("span");
+      label.textContent = BLOCK_LABELS[block] || block;
+      row.appendChild(label);
+
+      const up = document.createElement("button");
+      up.type = "button";
+      up.className = "scratch-mini";
+      up.textContent = "Up";
+      up.addEventListener("click", () => {
+        if (index === 0) return;
+        const tmp = scratchState.blocks[index - 1];
+        scratchState.blocks[index - 1] = scratchState.blocks[index];
+        scratchState.blocks[index] = tmp;
+        renderBlocks();
+      });
+      row.appendChild(up);
+
+      const down = document.createElement("button");
+      down.type = "button";
+      down.className = "scratch-mini";
+      down.textContent = "Down";
+      down.addEventListener("click", () => {
+        if (index >= scratchState.blocks.length - 1) return;
+        const tmp = scratchState.blocks[index + 1];
+        scratchState.blocks[index + 1] = scratchState.blocks[index];
+        scratchState.blocks[index] = tmp;
+        renderBlocks();
+      });
+      row.appendChild(down);
+
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "scratch-mini";
+      del.textContent = "Delete";
+      del.addEventListener("click", () => {
+        scratchState.blocks.splice(index, 1);
+        renderBlocks();
+      });
+      row.appendChild(del);
+      scratchBlocksWrap.appendChild(row);
+    });
+  };
+
+  const runScratchPreview = (config) => {
+    if (!previewStage) return;
+    previewCleanup();
+    const canvas = document.createElement("canvas");
+    canvas.className = "arcade-board";
+    canvas.width = 720;
+    canvas.height = 420;
+    previewStage.replaceChildren(canvas);
+    const ctx = canvas.getContext("2d");
+    const keys = new Set();
+    const player = { x: 350, y: 360, w: 24, h: 24 };
+    const entities = [];
+    let score = 0;
+    let over = false;
+    let tick = 0;
+    let raf = 0;
+
+    const collide = (a, b) =>
+      a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+
+    const onKeyDown = (event) => keys.add(event.key.toLowerCase());
+    const onKeyUp = (event) => keys.delete(event.key.toLowerCase());
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+
+    const loop = () => {
+      tick += 1;
+      const speed = 2.2 + config.speed * 0.52;
+      if (keys.has("arrowleft")) player.x -= speed;
+      if (keys.has("arrowright")) player.x += speed;
+      if (keys.has("arrowup")) player.y -= speed;
+      if (keys.has("arrowdown")) player.y += speed;
+      player.x = Math.max(0, Math.min(canvas.width - player.w, player.x));
+      player.y = Math.max(0, Math.min(canvas.height - player.h, player.y));
+
+      if (!over && tick % Math.max(8, Math.floor(36 / Math.max(0.5, config.spawnScale))) === 0) {
+        const pickupChance = config.mode === "collector" ? 0.42 : 0.18;
+        const kind = Math.random() < pickupChance ? "pickup" : "hazard";
+        entities.push({
+          kind,
+          x: Math.random() * (canvas.width - 22),
+          y: -24,
+          w: 22,
+          h: 22,
+          vy: 1.8 + config.speed * 0.55 + Math.random() * 1.4,
+        });
+      }
+
+      for (const e of entities) e.y += e.vy;
+      for (let i = entities.length - 1; i >= 0; i -= 1) {
+        const e = entities[i];
+        if (e.y > canvas.height + 40) {
+          entities.splice(i, 1);
+          continue;
+        }
+        if (!over && collide(player, e)) {
+          if (e.kind === "pickup") {
+            score += 8 + config.pointBonus;
+            entities.splice(i, 1);
+          } else {
+            over = true;
+          }
+        }
+      }
+
+      if (!over && config.mode !== "collector" && tick % 24 === 0) {
+        score += 2 + Math.floor(config.pointBonus / 2);
+      }
+
+      ctx.fillStyle = config.bgColor;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      for (const e of entities) {
+        ctx.fillStyle = e.kind === "pickup" ? "#dcffe8" : config.enemyColor;
+        ctx.fillRect(e.x, e.y, e.w, e.h);
+      }
+      ctx.fillStyle = config.playerColor;
+      ctx.fillRect(player.x, player.y, player.w, player.h);
+      ctx.fillStyle = "#d8eddf";
+      ctx.font = '700 18px "Manrope", sans-serif';
+      ctx.fillText(`Preview score: ${score}`, 14, 24);
+      if (over) {
+        ctx.fillStyle = "rgba(0,0,0,0.48)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#f0fff6";
+        ctx.font = '700 34px "Manrope", sans-serif';
+        ctx.fillText("Preview Over", canvas.width / 2 - 110, canvas.height / 2);
+      }
+      raf = requestAnimationFrame(loop);
+    };
+
+    loop();
+    previewCleanup = () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  };
+
+  const runCodePreview = () => {
+    if (!previewStage) return;
+    previewCleanup();
+    const iframe = document.createElement("iframe");
+    iframe.className = "ugc-frame";
+    iframe.sandbox = "allow-scripts";
+    iframe.referrerPolicy = "no-referrer";
+    iframe.srcdoc = String(codeTextarea?.value || "").trim();
+    previewStage.replaceChildren(iframe);
+    previewCleanup = () => {};
+  };
 
   const syncKind = () => {
     const kind = String(kindSelect?.value || "scratch");
     if (scratchWrap) scratchWrap.hidden = kind !== "scratch";
     if (codeWrap) codeWrap.hidden = kind !== "code";
+    if (scratchBuilder) scratchBuilder.hidden = kind !== "scratch";
   };
   syncKind();
   if (kindSelect) kindSelect.addEventListener("change", syncKind);
+  for (const btn of blockButtons) {
+    btn.addEventListener("click", () => {
+      const block = btn.getAttribute("data-add-block");
+      if (!block) return;
+      scratchState.blocks.push(block);
+      renderBlocks();
+    });
+  }
+  if (clearBlocksBtn) {
+    clearBlocksBtn.addEventListener("click", () => {
+      scratchState.blocks = [];
+      renderBlocks();
+    });
+  }
+  renderBlocks();
+
+  if (previewRunBtn) {
+    previewRunBtn.addEventListener("click", () => {
+      const fd = new FormData(form);
+      const kind = String(fd.get("kind") || "scratch");
+      if (kind === "code") {
+        runCodePreview();
+        return;
+      }
+      const base = {
+        mode: String(fd.get("scratchMode") || "dodger"),
+        speed: Number(fd.get("scratchSpeed") || 3),
+        playerColor: String(fd.get("scratchPlayerColor") || "#7be0a4"),
+        enemyColor: String(fd.get("scratchEnemyColor") || "#4f8f68"),
+        bgColor: String(fd.get("scratchBgColor") || "#08110d"),
+      };
+      runScratchPreview(interpretBlocks(base));
+    });
+  }
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -523,12 +756,16 @@ function initGameCreatorForm() {
     if (kind === "code") {
       payload.codeContent = String(fd.get("codeContent") || "");
     } else {
-      payload.scratch = {
+      const base = {
         mode: String(fd.get("scratchMode") || "dodger"),
         speed: Number(fd.get("scratchSpeed") || 3),
         playerColor: String(fd.get("scratchPlayerColor") || "#7be0a4"),
         enemyColor: String(fd.get("scratchEnemyColor") || "#4f8f68"),
         bgColor: String(fd.get("scratchBgColor") || "#08110d"),
+      };
+      payload.scratch = {
+        ...interpretBlocks(base),
+        blocks: [...scratchState.blocks],
       };
     }
 

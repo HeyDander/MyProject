@@ -1113,12 +1113,31 @@ app.post("/api/user-games/create", async (req, res) => {
     }
   } else {
     const raw = req.body.scratch || {};
+    const allowedBlocks = new Set([
+      "mode_dodger",
+      "mode_collector",
+      "mode_survivor",
+      "speed_up",
+      "speed_down",
+      "spawn_more",
+      "spawn_less",
+      "points_up",
+    ]);
+    const blocks = Array.isArray(raw.blocks)
+      ? raw.blocks
+          .map((x) => String(x))
+          .filter((x) => allowedBlocks.has(x))
+          .slice(0, 120)
+      : [];
     const scratch = {
       mode: String(raw.mode || "dodger").slice(0, 20),
       speed: Math.max(1, Math.min(6, Number(raw.speed || 3))),
       playerColor: /^#[0-9a-fA-F]{6}$/.test(String(raw.playerColor || "")) ? String(raw.playerColor) : "#7be0a4",
       enemyColor: /^#[0-9a-fA-F]{6}$/.test(String(raw.enemyColor || "")) ? String(raw.enemyColor) : "#4f8f68",
       bgColor: /^#[0-9a-fA-F]{6}$/.test(String(raw.bgColor || "")) ? String(raw.bgColor) : "#08110d",
+      spawnScale: Math.max(0.45, Math.min(2.4, Number(raw.spawnScale || 1))),
+      pointBonus: Math.max(0, Math.min(40, Number(raw.pointBonus || 0))),
+      blocks,
     };
     scratchJson = JSON.stringify(scratch);
   }

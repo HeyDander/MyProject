@@ -16,11 +16,26 @@ function spawnScratchGame(config) {
   stageEl.replaceChildren(canvas);
   const ctx = canvas.getContext("2d");
 
-  const mode = String(config.mode || "dodger");
-  const speed = Math.max(1, Math.min(6, Number(config.speed || 3)));
-  const playerColor = config.playerColor || "#7be0a4";
-  const enemyColor = config.enemyColor || "#4f8f68";
-  const bgColor = config.bgColor || "#08110d";
+  const blocks = Array.isArray(config.blocks) ? config.blocks : [];
+  const scratch = {
+    mode: String(config.mode || "dodger"),
+    speed: Math.max(1, Math.min(6, Number(config.speed || 3))),
+    playerColor: config.playerColor || "#7be0a4",
+    enemyColor: config.enemyColor || "#4f8f68",
+    bgColor: config.bgColor || "#08110d",
+    spawnScale: Math.max(0.45, Math.min(2.4, Number(config.spawnScale || 1))),
+    pointBonus: Number(config.pointBonus || 0),
+  };
+  for (const block of blocks) {
+    if (block === "mode_dodger") scratch.mode = "dodger";
+    if (block === "mode_collector") scratch.mode = "collector";
+    if (block === "mode_survivor") scratch.mode = "survivor";
+    if (block === "speed_up") scratch.speed = Math.min(6, scratch.speed + 1);
+    if (block === "speed_down") scratch.speed = Math.max(1, scratch.speed - 1);
+    if (block === "spawn_more") scratch.spawnScale = Math.min(2.4, scratch.spawnScale + 0.25);
+    if (block === "spawn_less") scratch.spawnScale = Math.max(0.45, scratch.spawnScale - 0.2);
+    if (block === "points_up") scratch.pointBonus += 2;
+  }
   const player = { x: 350, y: 360, w: 24, h: 24 };
   const entities = [];
   let score = 0;
@@ -42,15 +57,15 @@ function spawnScratchGame(config) {
 
     if (!over) {
       spawnTick += 1;
-      if (spawnTick % Math.max(10, 34 - speed * 4) === 0) {
-        const kind = mode === "collector" && Math.random() < 0.35 ? "pickup" : "hazard";
+      if (spawnTick % Math.max(8, Math.floor(34 / Math.max(0.5, scratch.spawnScale))) === 0) {
+        const kind = scratch.mode === "collector" && Math.random() < 0.35 ? "pickup" : "hazard";
         entities.push({
           kind,
           x: Math.random() * (canvas.width - 20),
           y: -24,
           w: 20,
           h: 20,
-          vy: 1.8 + speed * 0.45 + Math.random() * 1.4,
+          vy: 1.8 + scratch.speed * 0.45 + Math.random() * 1.4,
         });
       }
     }
@@ -64,27 +79,28 @@ function spawnScratchGame(config) {
       }
       if (!over && collide(player, e)) {
         if (e.kind === "pickup") {
-          score += 8;
+          score += 8 + scratch.pointBonus;
           entities.splice(i, 1);
-          if (window.GameSkins) window.GameSkins.awardPoints(8);
+          if (window.GameSkins) window.GameSkins.awardPoints(8 + scratch.pointBonus);
         } else {
           over = true;
         }
       }
     }
 
-    if (!over && mode !== "collector" && spawnTick % 24 === 0) {
-      score += 2;
-      if (window.GameSkins) window.GameSkins.awardPoints(2);
+    if (!over && scratch.mode !== "collector" && spawnTick % 24 === 0) {
+      const gain = 2 + Math.floor(scratch.pointBonus / 2);
+      score += gain;
+      if (window.GameSkins) window.GameSkins.awardPoints(gain);
     }
 
-    ctx.fillStyle = bgColor;
+    ctx.fillStyle = scratch.bgColor;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     for (const e of entities) {
-      ctx.fillStyle = e.kind === "pickup" ? "#d2ffd5" : enemyColor;
+      ctx.fillStyle = e.kind === "pickup" ? "#d2ffd5" : scratch.enemyColor;
       ctx.fillRect(e.x, e.y, e.w, e.h);
     }
-    ctx.fillStyle = playerColor;
+    ctx.fillStyle = scratch.playerColor;
     ctx.fillRect(player.x, player.y, player.w, player.h);
     ctx.fillStyle = "#d7ede0";
     ctx.font = '700 18px "Manrope", sans-serif';

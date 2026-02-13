@@ -619,6 +619,70 @@ button:active {
   min-height: 160px;
 }
 
+.scratch-builder,
+.scratch-preview {
+  border: 1px solid rgba(112, 150, 129, 0.32);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(10, 18, 14, 0.62);
+  display: grid;
+  gap: 10px;
+}
+
+.scratch-builder h3,
+.scratch-preview h3 {
+  margin: 0;
+  font-size: 0.98rem;
+}
+
+.scratch-palette {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.scratch-palette .btn {
+  min-height: 38px;
+  font-size: 0.84rem;
+}
+
+.scratch-blocks {
+  display: grid;
+  gap: 8px;
+}
+
+.scratch-block {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(115, 156, 133, 0.35);
+  background: rgba(9, 16, 13, 0.82);
+  border-radius: 10px;
+  padding: 8px;
+}
+
+.scratch-block span {
+  color: #d7ebdd;
+  font-size: 0.9rem;
+}
+
+.scratch-mini {
+  border: 1px solid rgba(109, 153, 128, 0.45);
+  background: rgba(14, 26, 19, 0.82);
+  color: #d8eade;
+  border-radius: 8px;
+  padding: 5px 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.scratch-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .ugc-stage {
   width: 100%;
   display: grid;

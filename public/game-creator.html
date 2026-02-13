@@ -62,12 +62,40 @@
                 <input name="scratchBgColor" type="color" value="#08110d" />
               </label>
             </div>
+
+            <section class="scratch-builder" data-scratch-builder>
+              <h3>Scratch Blocks</h3>
+              <div class="scratch-palette">
+                <button class="btn btn-ghost" type="button" data-add-block="mode_dodger">Mode: Dodger</button>
+                <button class="btn btn-ghost" type="button" data-add-block="mode_collector">Mode: Collector</button>
+                <button class="btn btn-ghost" type="button" data-add-block="mode_survivor">Mode: Survivor</button>
+                <button class="btn btn-ghost" type="button" data-add-block="speed_up">Speed +1</button>
+                <button class="btn btn-ghost" type="button" data-add-block="speed_down">Speed -1</button>
+                <button class="btn btn-ghost" type="button" data-add-block="spawn_more">More Enemies</button>
+                <button class="btn btn-ghost" type="button" data-add-block="spawn_less">Fewer Enemies</button>
+                <button class="btn btn-ghost" type="button" data-add-block="points_up">Points +2</button>
+              </div>
+              <div class="scratch-blocks" data-scratch-blocks>
+                <p class="hub-muted">Add blocks from palette.</p>
+              </div>
+              <div class="scratch-actions">
+                <button class="btn btn-ghost" type="button" data-scratch-clear>Clear Blocks</button>
+              </div>
+            </section>
           </div>
 
           <div data-code-settings hidden>
             <label for="game-code">Code (HTML with optional JS)</label>
             <textarea id="game-code" name="codeContent" rows="10" placeholder="<html><body><canvas id='c'></canvas><script>/* your game */</script></body></html>"></textarea>
           </div>
+
+          <section class="scratch-preview" data-game-preview>
+            <h3>Live Preview</h3>
+            <div class="ugc-stage" data-game-preview-stage></div>
+            <div class="scratch-actions">
+              <button class="btn btn-ghost" type="button" data-preview-run>Run Preview</button>
+            </div>
+          </section>
 
           <button class="btn" type="submit">Publish Game</button>
         </form>
