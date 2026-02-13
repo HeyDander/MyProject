@@ -98,6 +98,8 @@ const skinState = {
   loadingPromise: null,
   catalog: [],
 };
+const TT = (en, ru) =>
+  window.UII18N && typeof window.UII18N.t === "function" ? window.UII18N.t(en, ru) : en;
 
 function hashString(input) {
   let hash = 2166136261;
@@ -200,14 +202,14 @@ function updateProgressUI() {
     if (creatorToggle.tagName === "BUTTON") {
       creatorToggle.disabled = !canCreate;
       creatorToggle.textContent = canCreate
-        ? "Создать свой скин (200 очков)"
-        : "Создать свой скин (нужно 200 очков)";
+        ? TT("Create Your Skin (200 points)", "Создать свой скин (200 очков)")
+        : TT("Create Your Skin (need 200 points)", "Создать свой скин (нужно 200 очков)");
     } else {
       creatorToggle.classList.toggle("disabled", !canCreate);
       creatorToggle.setAttribute("aria-disabled", canCreate ? "false" : "true");
       creatorToggle.textContent = canCreate
-        ? "Создать свой скин (200 очков)"
-        : "Создать свой скин (нужно 200 очков)";
+        ? TT("Create Your Skin (200 points)", "Создать свой скин (200 очков)")
+        : TT("Create Your Skin (need 200 points)", "Создать свой скин (нужно 200 очков)");
     }
   }
 
@@ -297,7 +299,7 @@ async function onSkinAction(skinId) {
       });
       skinState.points = result.points;
       skinState.ownedSkins = result.ownedSkins;
-      setShopMessage(`${skin.name} куплен.`, false);
+      setShopMessage(`${skin.name} ${TT("purchased.", "куплен.")}`, false);
     }
 
     const selected = await window.requestJson("/api/progress/select", {
@@ -308,10 +310,10 @@ async function onSkinAction(skinId) {
     skinState.selectedSkin = selected.selectedSkin;
     skinState.points = selected.points;
     skinState.ownedSkins = selected.ownedSkins;
-    setShopMessage(`${skin.name} выбран.`, false);
+    setShopMessage(`${skin.name} ${TT("equipped.", "выбран.")}`, false);
     updateProgressUI();
   } catch (error) {
-    setShopMessage(error.message || "Не удалось выполнить действие со скином.", true);
+    setShopMessage(error.message || TT("Skin action failed.", "Не удалось выполнить действие со скином."), true);
   }
 }
 
@@ -327,10 +329,10 @@ async function onSkinRemove(skinId) {
     skinState.points = result.points;
     skinState.ownedSkins = result.ownedSkins;
     skinState.selectedSkin = result.selectedSkin;
-    setShopMessage(`${skin.name} удален (+${result.refunded} очков).`, false);
+    setShopMessage(`${skin.name} ${TT("removed", "удален")} (+${result.refunded} ${TT("points", "очков")}).`, false);
     updateProgressUI();
   } catch (error) {
-    setShopMessage(error.message || "Не удалось удалить скин.", true);
+    setShopMessage(error.message || TT("Failed to remove skin.", "Не удалось удалить скин."), true);
   }
 }
 
@@ -342,15 +344,15 @@ async function onSkinUnlist(skinId) {
       body: JSON.stringify({ skinId }),
     });
     await refreshProgress();
-    setShopMessage("Скин снят с продажи.", false);
+    setShopMessage(TT("Skin removed from sale.", "Скин снят с продажи."), false);
   } catch (error) {
-    setShopMessage(error.message || "Не удалось снять скин с продажи.", true);
+    setShopMessage(error.message || TT("Failed to remove skin from sale.", "Не удалось снять скин с продажи."), true);
   }
 }
 
 async function onSkinDelete(skinId) {
   setShopMessage("", false);
-  const ok = window.confirm("Удалить этот пользовательский скин из игры для всех?");
+  const ok = window.confirm(TT("Delete this custom skin from game for everyone?", "Удалить этот пользовательский скин из игры для всех?"));
   if (!ok) return;
   try {
     await window.requestJson("/api/skins/delete", {
@@ -358,9 +360,9 @@ async function onSkinDelete(skinId) {
       body: JSON.stringify({ skinId }),
     });
     await refreshProgress();
-    setShopMessage("Пользовательский скин удален.", false);
+    setShopMessage(TT("Custom skin deleted.", "Пользовательский скин удален."), false);
   } catch (error) {
-    setShopMessage(error.message || "Не удалось удалить пользовательский скин.", true);
+    setShopMessage(error.message || TT("Failed to delete custom skin.", "Не удалось удалить пользовательский скин."), true);
   }
 }
 
@@ -381,7 +383,10 @@ function renderShop() {
     if (!list.length) {
       const empty = document.createElement("p");
       empty.className = "shop-message";
-      empty.textContent = mode === "created" ? "Пока нет созданных скинов." : "Пока нет купленных скинов.";
+      empty.textContent =
+        mode === "created"
+          ? TT("No created skins yet.", "Пока нет созданных скинов.")
+          : TT("No owned skins yet.", "Пока нет купленных скинов.");
       shop.appendChild(empty);
       continue;
     }
@@ -402,19 +407,21 @@ function renderShop() {
       const price = document.createElement("p");
       price.className = "skin-price";
       price.textContent = skinState.ownedSkins.includes(skin.id)
-        ? "Куплен"
-        : `${skin.cost} очков`;
+        ? TT("Owned", "Куплен")
+        : `${skin.cost} ${TT("points", "очков")}`;
 
       const meta = document.createElement("p");
       meta.className = "skin-meta";
       if (skin.isCustom) {
         if (skin.userCreated) {
-          meta.textContent = skin.isListed ? "Ваш скин (на продаже)" : "Ваш скин";
+          meta.textContent = skin.isListed
+            ? TT("Your custom skin (on sale)", "Ваш скин (на продаже)")
+            : TT("Your custom skin", "Ваш скин");
         } else {
-          meta.textContent = `Создал: ${skin.createdBy || "игрок"}`;
+          meta.textContent = `${TT("Created by", "Создал")}: ${skin.createdBy || TT("player", "игрок")}`;
         }
       } else {
-        meta.textContent = "Официальный скин";
+        meta.textContent = TT("Official skin", "Официальный скин");
       }
 
       const actions = document.createElement("div");
@@ -439,7 +446,7 @@ function renderShop() {
       if (skin.isCustom && skin.userCreated && skin.isListed) {
         const unlistBtn = document.createElement("button");
         unlistBtn.className = "btn btn-ghost skin-action";
-        unlistBtn.textContent = "Снять с продажи";
+        unlistBtn.textContent = TT("Remove from sale", "Снять с продажи");
         unlistBtn.addEventListener("click", () => onSkinUnlist(skin.id));
         actions.appendChild(unlistBtn);
       }
@@ -447,7 +454,7 @@ function renderShop() {
       if (skin.isCustom && skin.userCreated) {
         const deleteBtn = document.createElement("button");
         deleteBtn.className = "btn btn-ghost skin-action";
-        deleteBtn.textContent = "Удалить скин";
+        deleteBtn.textContent = TT("Delete skin", "Удалить скин");
         deleteBtn.addEventListener("click", () => onSkinDelete(skin.id));
         actions.appendChild(deleteBtn);
       }
@@ -470,19 +477,19 @@ function initCreatorForm() {
   if (toggleBtn && toggleBtn.tagName === "BUTTON") {
     toggleBtn.addEventListener("click", () => {
       if (skinState.points < 200) {
-        setShopMessage("Нужно 200 очков, чтобы открыть редактор.", true);
+        setShopMessage(TT("You need 200 points to open creator.", "Нужно 200 очков, чтобы открыть редактор."), true);
         return;
       }
       form.hidden = !form.hidden;
       toggleBtn.textContent = form.hidden
-        ? "Создать свой скин (200 очков)"
-        : "Закрыть редактор";
+        ? TT("Create Your Skin (200 points)", "Создать свой скин (200 очков)")
+        : TT("Close Creator", "Закрыть редактор");
     });
   } else if (toggleBtn && toggleBtn.tagName === "A") {
     toggleBtn.addEventListener("click", (event) => {
       if (skinState.points >= 200) return;
       event.preventDefault();
-      setShopMessage("Нужно 200 очков, чтобы открыть редактор.", true);
+      setShopMessage(TT("You need 200 points to open creator.", "Нужно 200 очков, чтобы открыть редактор."), true);
     });
   } else {
     form.hidden = false;
@@ -511,10 +518,10 @@ function initCreatorForm() {
         body: JSON.stringify(payload),
       });
       await refreshProgress();
-      setShopMessage("Пользовательский скин создан.", false);
+      setShopMessage(TT("Custom skin created.", "Пользовательский скин создан."), false);
       form.reset();
     } catch (error) {
-      setShopMessage(error.message || "Не удалось создать пользовательский скин.", true);
+      setShopMessage(error.message || TT("Failed to create custom skin.", "Не удалось создать пользовательский скин."), true);
     }
   });
 }

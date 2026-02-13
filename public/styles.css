@@ -1250,3 +1250,12 @@ button:active {
   line-height: 1.45;
   font-size: 0.88rem;
 }
+
+.language-toggle {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 90;
+  min-width: 64px;
+  padding: 10px 12px;
+}

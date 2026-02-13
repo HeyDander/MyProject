@@ -1,3 +1,7 @@
+const UI_LANG_KEY = "ui-lang";
+const UI_LANG = localStorage.getItem(UI_LANG_KEY) === "ru" ? "ru" : "en";
+const T = (en, ru) => (UI_LANG === "ru" ? ru : en);
+
 async function requestJson(url, options) {
   const response = await fetch(url, {
     headers: {
@@ -16,13 +20,14 @@ async function requestJson(url, options) {
   }
 
   if (!response.ok) {
-    const error = payload && payload.error ? payload.error : "Ошибка запроса.";
+    const error = payload && payload.error ? payload.error : T("Request failed.", "Ошибка запроса.");
     throw new Error(error);
   }
 
   return payload;
 }
 window.requestJson = requestJson;
+window.UII18N = { lang: UI_LANG, t: T };
 
 function initRussianLocale() {
   const textMap = new Map([
@@ -98,7 +103,51 @@ function initRussianLocale() {
     ["Upload Game From PC", "Загрузка игры с ПК"],
     ["Open PC Guide", "Открыть гайд по ПК"],
     ["Open Upload Page", "Открыть страницу загрузки"],
+    ["Welcome back", "С возвращением"],
+    ["Sign in to your account", "Войдите в свой аккаунт"],
+    ["Secure Access", "Безопасный доступ"],
+    ["Sign in to continue with your files and personalized workspace settings.", "Войдите, чтобы продолжить работу с файлами и персональными настройками."],
+    ["Enter your account credentials", "Введите данные аккаунта"],
+    ["Don't have an account?", "Еще нет аккаунта?"],
+    ["Register now", "Зарегистрироваться"],
+    ["New Account", "Новый аккаунт"],
+    ["Register", "Регистрация"],
+    ["Register to unlock your secure dashboard and keep your data in one place.", "Зарегистрируйтесь, чтобы открыть защищенный хаб и хранить данные в одном месте."],
+    ["At least 8 characters", "Минимум 8 символов"],
+    ["Keep me signed in", "Оставаться в системе"],
+    ["I already have an account", "У меня уже есть аккаунт"],
+    ["Verification", "Подтверждение"],
+    ["Confirm your email", "Подтвердите почту"],
+    ["We sent a 6-digit code to your email. Enter it below to activate your account.", "Мы отправили 6-значный код на вашу почту. Введите его ниже для активации аккаунта."],
+    ["Verify Email", "Подтверждение почты"],
+    ["Check your inbox and enter the verification code", "Проверьте почту и введите код подтверждения"],
+    ["Code", "Код"],
+    ["6-digit code", "6-значный код"],
+    ["Verify", "Подтвердить"],
+    ["Resend code", "Отправить код повторно"],
+    ["Already verified?", "Уже подтвердили?"],
+    ["Go to login", "Перейти ко входу"],
+    ["Email", "Почта"],
+    ["Password", "Пароль"],
+    ["Remember me", "Запомнить меня"],
+    ["Forgot password?", "Забыли пароль?"],
+    ["Sign in", "Войти"],
+    ["No account yet?", "Еще нет аккаунта?"],
+    ["Create account", "Создать аккаунт"],
+    ["Show", "Показать"],
+    ["Hide", "Скрыть"],
+    ["Create your profile", "Создайте профиль"],
+    ["Create your account in less than a minute", "Создайте аккаунт меньше чем за минуту"],
+    ["Username", "Имя пользователя"],
+    ["Already have an account?", "Уже есть аккаунт?"],
+    ["Create Account", "Создать аккаунт"],
+    ["Verify Email", "Подтверждение почты"],
+    ["Sign Up", "Регистрация"],
+    ["Log In", "Вход"],
   ]);
+  const normalizedTextMap = new Map(
+    Array.from(textMap.entries()).map(([en, ru]) => [String(en).replace(/\s+/g, " ").trim(), ru])
+  );
 
   const placeholderMap = new Map([
     ["Friend username", "Ник друга"],
@@ -114,6 +163,10 @@ function initRussianLocale() {
     if (!trimmed) return value;
     if (textMap.has(trimmed)) {
       return value.replace(trimmed, textMap.get(trimmed));
+    }
+    const normalized = trimmed.replace(/\s+/g, " ").trim();
+    if (normalizedTextMap.has(normalized)) {
+      return value.replace(trimmed, normalizedTextMap.get(normalized));
     }
     return value;
   };
@@ -150,11 +203,14 @@ function initRussianLocale() {
     ["PC Upload Guide", "Гайд по загрузке с ПК"],
     ["Uploaded Game", "Загруженная игра"],
     ["Pong Online", "Pong Онлайн"],
+    ["Login", "Вход"],
+    ["Create Account", "Создать аккаунт"],
   ]);
   if (titleMap.has(document.title)) {
     document.title = titleMap.get(document.title);
   }
 
+  if (UI_LANG !== "ru") return;
   apply(document);
   const observer = new MutationObserver((mutations) => {
     for (const m of mutations) {
@@ -166,6 +222,22 @@ function initRussianLocale() {
     }
   });
   observer.observe(document.body, { childList: true, subtree: true });
+}
+
+function initLanguageToggle() {
+  const existing = document.querySelector("[data-lang-toggle]");
+  if (existing) return;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "btn btn-ghost language-toggle";
+  btn.setAttribute("data-lang-toggle", "true");
+  btn.textContent = UI_LANG === "ru" ? "EN" : "RU";
+  btn.addEventListener("click", () => {
+    const next = UI_LANG === "ru" ? "en" : "ru";
+    localStorage.setItem(UI_LANG_KEY, next);
+    window.location.reload();
+  });
+  document.body.appendChild(btn);
 }
 
 function setMessage(messageEl, text, isError) {
@@ -195,7 +267,7 @@ function initAuthForm() {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      setMessage(messageEl, "Успешно. Перенаправление...", false);
+      setMessage(messageEl, T("Success. Redirecting...", "Успешно. Перенаправление..."), false);
       window.location.href = result.redirect || "/dashboard";
     } catch (error) {
       setMessage(messageEl, error.message, true);
@@ -216,7 +288,7 @@ function initPasswordToggles() {
     toggle.addEventListener("click", () => {
       const isHidden = input.type === "password";
       input.type = isHidden ? "text" : "password";
-      toggle.textContent = isHidden ? "Hide" : "Show";
+      toggle.textContent = isHidden ? T("Hide", "Скрыть") : T("Show", "Показать");
     });
   }
 }
@@ -239,7 +311,7 @@ async function initDashboard() {
     if (top3ListEl) {
       const rows = Array.isArray(leaderboard?.top) ? leaderboard.top.slice(0, 3) : [];
       if (!rows.length) {
-        top3ListEl.innerHTML = '<p class="top3-empty">Пока нет игроков.</p>';
+        top3ListEl.innerHTML = `<p class="top3-empty">${T("No players yet.", "Пока нет игроков.")}</p>`;
       } else {
         top3ListEl.innerHTML = rows
           .map((row) => {
@@ -285,7 +357,7 @@ async function initHubExtras() {
   const renderRows = (container, rows) => {
     if (!container) return;
     if (!rows.length) {
-      container.innerHTML = '<p class="hub-muted">Пока нет данных.</p>';
+      container.innerHTML = `<p class="hub-muted">${T("No data yet.", "Пока нет данных.")}</p>`;
       return;
     }
     container.innerHTML = rows
@@ -296,14 +368,14 @@ async function initHubExtras() {
   const load = async () => {
     const data = await requestJson("/api/player/home", { method: "GET" });
     if (profileLine) {
-      profileLine.textContent = `${data.profile.username} | Всего очков: ${data.profile.points} | Серия: ${data.profile.dailyStreak}`;
+      profileLine.textContent = `${data.profile.username} | ${T("Total points", "Всего очков")}: ${data.profile.points} | ${T("Streak", "Серия")}: ${data.profile.dailyStreak}`;
     }
     if (seasonLine) {
-      seasonLine.textContent = `Сезонные очки: ${data.profile.seasonPoints} | Место в сезоне: #${data.profile.seasonRank}`;
+      seasonLine.textContent = `${T("Season points", "Сезонные очки")}: ${data.profile.seasonPoints} | ${T("Season rank", "Место в сезоне")}: #${data.profile.seasonRank}`;
     }
     lastGame = data.profile.lastGame || "/snake";
     if (lastGameLine) {
-      lastGameLine.textContent = `Последняя игра: ${lastGame}`;
+      lastGameLine.textContent = `${T("Last game", "Последняя игра")}: ${lastGame}`;
     }
 
     renderRows(
@@ -340,12 +412,12 @@ async function initHubExtras() {
 
       if (incomingList) {
         if (!incoming.length) {
-          incomingList.innerHTML = '<p class="hub-muted">Нет входящих заявок.</p>';
+          incomingList.innerHTML = `<p class="hub-muted">${T("No incoming requests.", "Нет входящих заявок.")}</p>`;
         } else {
           incomingList.innerHTML = incoming
             .map(
               (r) =>
-                `<p class="hub-row"><span>Входящая: ${r.username}</span><span><button class="btn btn-ghost" type="button" data-request-accept="${r.id}">Принять</button> <button class="btn btn-ghost" type="button" data-request-reject="${r.id}">Отклонить</button></span></p>`
+                `<p class="hub-row"><span>${T("Incoming", "Входящая")}: ${r.username}</span><span><button class="btn btn-ghost" type="button" data-request-accept="${r.id}">${T("Accept", "Принять")}</button> <button class="btn btn-ghost" type="button" data-request-reject="${r.id}">${T("Reject", "Отклонить")}</button></span></p>`
             )
             .join("");
         }
@@ -353,19 +425,19 @@ async function initHubExtras() {
 
       if (outgoingList) {
         if (!outgoing.length) {
-          outgoingList.innerHTML = '<p class="hub-muted">Нет исходящих заявок.</p>';
+          outgoingList.innerHTML = `<p class="hub-muted">${T("No outgoing requests.", "Нет исходящих заявок.")}</p>`;
         } else {
           outgoingList.innerHTML = outgoing
             .map(
               (r) =>
-                `<p class="hub-row"><span>Исходящая: ${r.username}</span><button class="btn btn-ghost" type="button" data-request-cancel="${r.id}">Отменить</button></p>`
+                `<p class="hub-row"><span>${T("Outgoing", "Исходящая")}: ${r.username}</span><button class="btn btn-ghost" type="button" data-request-cancel="${r.id}">${T("Cancel", "Отменить")}</button></p>`
             )
             .join("");
         }
       }
     } catch (_error) {
-      if (incomingList) incomingList.innerHTML = '<p class="hub-muted">Не удалось загрузить заявки.</p>';
-      if (outgoingList) outgoingList.innerHTML = '<p class="hub-muted">Не удалось загрузить заявки.</p>';
+      if (incomingList) incomingList.innerHTML = `<p class="hub-muted">${T("Failed to load requests.", "Не удалось загрузить заявки.")}</p>`;
+      if (outgoingList) outgoingList.innerHTML = `<p class="hub-muted">${T("Failed to load requests.", "Не удалось загрузить заявки.")}</p>`;
     }
   };
 
@@ -373,7 +445,7 @@ async function initHubExtras() {
     await load();
     await loadFriendRequests();
   } catch (_error) {
-    if (profileLine) profileLine.textContent = "Не удалось загрузить данные игрока.";
+    if (profileLine) profileLine.textContent = T("Failed to load player data.", "Не удалось загрузить данные игрока.");
   }
 
   if (continueBtn) {
@@ -394,7 +466,7 @@ async function initHubExtras() {
           body: JSON.stringify({ username }),
         });
         if (friendMsg) {
-          friendMsg.textContent = "Заявка отправлена.";
+          friendMsg.textContent = T("Request sent.", "Заявка отправлена.");
           friendMsg.classList.remove("is-error");
           friendMsg.classList.add("is-success");
         }
@@ -403,7 +475,7 @@ async function initHubExtras() {
         await load();
       } catch (error) {
         if (friendMsg) {
-          friendMsg.textContent = error.message || "Не удалось отправить заявку в друзья.";
+          friendMsg.textContent = error.message || T("Failed to send friend request.", "Не удалось отправить заявку в друзья.");
           friendMsg.classList.remove("is-success");
           friendMsg.classList.add("is-error");
         }
@@ -418,7 +490,9 @@ async function initHubExtras() {
         method: "POST",
       });
       if (friendMsg) {
-        friendMsg.textContent = action === "accept" ? "Заявка принята." : "Заявка закрыта.";
+        friendMsg.textContent = action === "accept"
+          ? T("Request accepted.", "Заявка принята.")
+          : T("Request closed.", "Заявка закрыта.");
         friendMsg.classList.remove("is-error");
         friendMsg.classList.add("is-success");
       }
@@ -479,7 +553,7 @@ function initDeleteAccount() {
     if (!password) return;
 
     const confirmDelete = window.confirm(
-      "Удалить аккаунт навсегда? Это действие нельзя отменить."
+      T("Delete account permanently? This action cannot be undone.", "Удалить аккаунт навсегда? Это действие нельзя отменить.")
     );
     if (!confirmDelete) return;
 
@@ -490,7 +564,7 @@ function initDeleteAccount() {
       });
       window.location.href = result.redirect || "/login";
     } catch (error) {
-      window.alert(error.message || "Не удалось удалить аккаунт.");
+      window.alert(error.message || T("Failed to delete account.", "Не удалось удалить аккаунт."));
     }
   });
 }
@@ -541,7 +615,7 @@ async function initUploadedGames() {
     const data = await requestJson("/api/uploaded-games", { method: "GET" });
     const games = Array.isArray(data.games) ? data.games.slice(0, 12) : [];
     if (!games.length) {
-      list.innerHTML = '<p class="hub-muted">Пока нет загруженных игр.</p>';
+      list.innerHTML = `<p class="hub-muted">${T("No uploaded games yet.", "Пока нет загруженных игр.")}</p>`;
       return;
     }
     list.innerHTML = games
@@ -551,7 +625,7 @@ async function initUploadedGames() {
       )
       .join("");
   } catch (_error) {
-    list.innerHTML = '<p class="hub-muted">Не удалось загрузить загруженные игры.</p>';
+    list.innerHTML = `<p class="hub-muted">${T("Failed to load uploaded games.", "Не удалось загрузить загруженные игры.")}</p>`;
   }
 }
 
@@ -589,7 +663,10 @@ function initUploadGameForm() {
       } catch (_error) {
         setMessage(
           message,
-          "Не удалось прочитать файл. Загрузите JSON с полями title, description, htmlContent.",
+          T(
+            "Cannot read file. Upload JSON package with title, description, htmlContent.",
+            "Не удалось прочитать файл. Загрузите JSON с полями title, description, htmlContent."
+          ),
           true
         );
       }
@@ -619,7 +696,7 @@ function initUploadGameForm() {
         }, 350);
       }
     } catch (error) {
-      setMessage(message, error.message || "Загрузка не удалась.", true);
+      setMessage(message, error.message || T("Upload failed.", "Загрузка не удалась."), true);
     }
   });
 }
@@ -659,31 +736,31 @@ function initCoopPlay() {
     overlay.style.maxWidth = "260px";
     overlay.style.padding = "10px 12px";
     overlay.style.fontSize = "0.85rem";
-    overlay.innerHTML = '<p class="hub-muted">Нет активной кооп-комнаты.</p>';
+    overlay.innerHTML = `<p class="hub-muted">${T("No active co-op room.", "Нет активной кооп-комнаты.")}</p>`;
     document.body.appendChild(overlay);
   }
 
   const renderState = (room) => {
     if (!room) {
-      if (stateBox) stateBox.innerHTML = '<p class="hub-muted">Нет активной кооп-комнаты.</p>';
-      if (overlay) overlay.innerHTML = '<p class="hub-muted">Нет активной кооп-комнаты.</p>';
+      if (stateBox) stateBox.innerHTML = `<p class="hub-muted">${T("No active co-op room.", "Нет активной кооп-комнаты.")}</p>`;
+      if (overlay) overlay.innerHTML = `<p class="hub-muted">${T("No active co-op room.", "Нет активной кооп-комнаты.")}</p>`;
       return;
     }
     if (!stateBox && !overlay) return;
     stateBox.innerHTML = [
-      `<p class="hub-row"><span>Код</span><strong>${room.code}</strong></p>`,
-      `<p class="hub-row"><span>Статус</span><strong>${room.status}</strong></p>`,
+      `<p class="hub-row"><span>${T("Code", "Код")}</span><strong>${room.code}</strong></p>`,
+      `<p class="hub-row"><span>${T("Status", "Статус")}</span><strong>${room.status}</strong></p>`,
       `<p class="hub-row"><span>${room.players.host}</span><strong>${room.points.host}</strong></p>`,
       `<p class="hub-row"><span>${room.players.friend}</span><strong>${room.points.friend}</strong></p>`,
-      `<p class="hub-row"><span>Итого</span><strong>${room.points.total}</strong></p>`,
+      `<p class="hub-row"><span>${T("Total", "Итого")}</span><strong>${room.points.total}</strong></p>`,
     ].join("");
 
     if (overlay) {
       overlay.innerHTML = [
-        `<p class="hub-row"><span>Кооп ${room.code}</span><strong>${room.status}</strong></p>`,
+        `<p class="hub-row"><span>${T("Co-op", "Кооп")} ${room.code}</span><strong>${room.status}</strong></p>`,
         `<p class="hub-row"><span>${room.players.host}</span><strong>${room.points.host}</strong></p>`,
         `<p class="hub-row"><span>${room.players.friend}</span><strong>${room.points.friend}</strong></p>`,
-        `<p class="hub-row"><span>Итого</span><strong>${room.points.total}</strong></p>`,
+        `<p class="hub-row"><span>${T("Total", "Итого")}</span><strong>${room.points.total}</strong></p>`,
       ].join("");
     }
   };
@@ -691,7 +768,7 @@ function initCoopPlay() {
   const poll = async () => {
     if (!code) {
       renderState(null);
-      if (overlay) overlay.innerHTML = '<p class="hub-muted">Нет активной кооп-комнаты.</p>';
+      if (overlay) overlay.innerHTML = `<p class="hub-muted">${T("No active co-op room.", "Нет активной кооп-комнаты.")}</p>`;
       return;
     }
     try {
@@ -703,7 +780,7 @@ function initCoopPlay() {
       code = "";
       localStorage.removeItem(COOP_KEY);
       renderState(null);
-      if (overlay) overlay.innerHTML = '<p class="hub-muted">Кооп-комната истекла.</p>';
+      if (overlay) overlay.innerHTML = `<p class="hub-muted">${T("Co-op room expired.", "Кооп-комната истекла.")}</p>`;
     }
   };
 
@@ -725,10 +802,10 @@ function initCoopPlay() {
         });
         code = created.code;
         localStorage.setItem(COOP_KEY, code);
-        setMessage(message, `Кооп-комната создана: ${code}`, false);
+        setMessage(message, `${T("Co-op room created", "Кооп-комната создана")}: ${code}`, false);
         await poll();
       } catch (error) {
-        setMessage(message, error.message || "Не удалось создать кооп-комнату.", true);
+        setMessage(message, error.message || T("Failed to create co-op room.", "Не удалось создать кооп-комнату."), true);
       }
     });
   }
@@ -747,10 +824,10 @@ function initCoopPlay() {
         });
         code = joinCode;
         localStorage.setItem(COOP_KEY, code);
-        setMessage(message, `Вы вошли в комнату: ${code}`, false);
+        setMessage(message, `${T("Joined room", "Вы вошли в комнату")}: ${code}`, false);
         await poll();
       } catch (error) {
-        setMessage(message, error.message || "Не удалось войти в комнату.", true);
+        setMessage(message, error.message || T("Failed to join room.", "Не удалось войти в комнату."), true);
       }
     });
   }
@@ -798,7 +875,7 @@ function initCoopPlay() {
   if (leaveBtn) {
     leaveBtn.addEventListener("click", async () => {
       await window.CoopPlay.leave();
-      setMessage(message, "Кооп-комната закрыта.", false);
+      setMessage(message, T("Co-op room closed.", "Кооп-комната закрыта."), false);
     });
   }
 
@@ -835,6 +912,7 @@ function initLastGameResume() {
 
 document.addEventListener("DOMContentLoaded", () => {
   initRussianLocale();
+  initLanguageToggle();
   initAuthForm();
   initPasswordToggles();
   initDashboard();

@@ -1,4 +1,6 @@
 (function () {
+  const TT = (en, ru) =>
+    window.UII18N && typeof window.UII18N.t === "function" ? window.UII18N.t(en, ru) : en;
   const titleEl = document.querySelector("[data-uploaded-title]");
   const metaEl = document.querySelector("[data-uploaded-meta]");
   const stage = document.querySelector("[data-uploaded-stage]");
@@ -6,7 +8,7 @@
 
   const slug = (window.location.pathname.split("/").pop() || "").trim();
   if (!slug) {
-    stage.innerHTML = '<p class="hub-muted">Отсутствует id игры.</p>';
+    stage.innerHTML = `<p class="hub-muted">${TT("Game id is missing.", "Отсутствует id игры.")}</p>`;
     return;
   }
 
@@ -17,7 +19,7 @@
   window
     .requestJson(`/api/uploaded-games/${encodeURIComponent(slug)}`, { method: "GET" })
     .then((game) => {
-      if (titleEl) titleEl.textContent = game.title || "Загруженная игра";
+      if (titleEl) titleEl.textContent = game.title || TT("Uploaded Game", "Загруженная игра");
       if (metaEl) {
         const by = game.creator ? `by ${game.creator}` : "";
         metaEl.textContent = [by, game.description || ""].filter(Boolean).join(" | ");
@@ -31,6 +33,6 @@
       stage.replaceChildren(frame);
     })
     .catch((error) => {
-      renderError(error.message || "Не удалось загрузить загруженную игру.");
+      renderError(error.message || TT("Failed to load uploaded game.", "Не удалось загрузить загруженную игру."));
     });
 })();
