@@ -74,7 +74,7 @@ function draw() {
     ctx.fillStyle = accent;
     ctx.font = '700 24px "Manrope", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Create room or join room code', canvas.width / 2, canvas.height / 2);
+    ctx.fillText('Создайте комнату или введите код', canvas.width / 2, canvas.height / 2);
     return;
   }
 
@@ -95,7 +95,7 @@ function draw() {
     ctx.fillStyle = accent;
     ctx.font = '700 30px "Manrope", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Waiting for second player...', canvas.width / 2, canvas.height / 2);
+    ctx.fillText('Ожидание второго игрока...', canvas.width / 2, canvas.height / 2);
   }
 
   if (state.game.status === 'finished') {
@@ -105,7 +105,7 @@ function draw() {
     ctx.font = '700 34px "Manrope", sans-serif';
     ctx.textAlign = 'center';
     const won = state.game.winner === state.role;
-    ctx.fillText(won ? 'You Win' : 'You Lose', canvas.width / 2, canvas.height / 2);
+    ctx.fillText(won ? 'Победа' : 'Поражение', canvas.width / 2, canvas.height / 2);
   }
 }
 
@@ -122,18 +122,18 @@ async function fetchState() {
     updateScore();
 
     const enemyName = state.role === 'host' ? game.players.guest : game.players.host;
-    if (game.status === 'waiting') setStatus(`Waiting... Share code ${state.code}`);
-    if (game.status === 'playing') setStatus(`Playing vs ${enemyName || 'player'}`);
+    if (game.status === 'waiting') setStatus(`Ожидание... отправь код ${state.code}`);
+    if (game.status === 'playing') setStatus(`Игра против ${enemyName || 'игрока'}`);
     if (game.status === 'finished') {
       const won = game.winner === state.role;
-      setStatus(won ? 'You won the match' : 'You lost this match');
+      setStatus(won ? 'Ты выиграл матч' : 'Ты проиграл матч');
       if (won && !state.rewardGiven && prevStatus !== 'finished' && window.GameSkins) {
         window.GameSkins.awardPoints(40);
         state.rewardGiven = true;
       }
     }
   } catch (error) {
-    setMsg(error.message || 'Failed to sync match.', true);
+    setMsg(error.message || 'Не удалось синхронизировать матч.', true);
   }
 }
 
@@ -181,11 +181,11 @@ if (createBtn) {
       state.role = result.role;
       state.rewardGiven = false;
       if (roomEl) roomEl.textContent = state.code;
-      setStatus(`Room created: ${state.code}`);
-      setMsg('Room created. Send code to friend.', false);
+      setStatus(`Комната создана: ${state.code}`);
+      setMsg('Комната создана. Отправь код другу.', false);
       await fetchState();
     } catch (error) {
-      setMsg(error.message || 'Failed to create room.', true);
+      setMsg(error.message || 'Не удалось создать комнату.', true);
     }
   });
 }
@@ -197,7 +197,7 @@ if (joinForm) {
     const fd = new FormData(joinForm);
     const code = String(fd.get('code') || '').trim().toUpperCase();
     if (!code) {
-      setMsg('Enter room code.', true);
+      setMsg('Введите код комнаты.', true);
       return;
     }
     try {
@@ -209,10 +209,10 @@ if (joinForm) {
       state.role = result.role;
       state.rewardGiven = false;
       if (roomEl) roomEl.textContent = state.code;
-      setMsg('Joined room.', false);
+      setMsg('Вы вошли в комнату.', false);
       await fetchState();
     } catch (error) {
-      setMsg(error.message || 'Failed to join room.', true);
+      setMsg(error.message || 'Не удалось войти в комнату.', true);
     }
   });
 }
@@ -226,9 +226,9 @@ if (restartBtn) {
         body: JSON.stringify({ code: state.code }),
       });
       state.rewardGiven = false;
-      setMsg('Match restarted.', false);
+      setMsg('Матч перезапущен.', false);
     } catch (error) {
-      setMsg(error.message || 'Restart failed.', true);
+      setMsg(error.message || 'Не удалось перезапустить матч.', true);
     }
   });
 }

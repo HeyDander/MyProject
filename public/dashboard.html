@@ -124,6 +124,12 @@
               />
               <button class="btn" type="submit">Add friend</button>
             </form>
+            <div class="hub-list" data-friend-incoming>
+              <p class="hub-muted">No incoming requests.</p>
+            </div>
+            <div class="hub-list" data-friend-outgoing>
+              <p class="hub-muted">No outgoing requests.</p>
+            </div>
             <div class="hub-list" data-friends-list>
               <p class="hub-muted">No friends yet.</p>
             </div>
@@ -143,10 +149,8 @@
               <input
                 type="text"
                 name="friendUsername"
-                placeholder="Friend username"
-                minlength="3"
+                placeholder="Friend username (optional)"
                 maxlength="24"
-                required
               />
               <button class="btn" type="submit">Create Co-op</button>
             </form>

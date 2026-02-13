@@ -16,13 +16,157 @@ async function requestJson(url, options) {
   }
 
   if (!response.ok) {
-    const error = payload && payload.error ? payload.error : "Request failed.";
+    const error = payload && payload.error ? payload.error : "Ошибка запроса.";
     throw new Error(error);
   }
 
   return payload;
 }
 window.requestJson = requestJson;
+
+function initRussianLocale() {
+  const textMap = new Map([
+    ["Game Hub", "Игровой хаб"],
+    ["Pick a mode, jump in, earn points, and unlock skins.", "Выбери режим, играй, зарабатывай очки и открывай скины."],
+    ["Loading...", "Загрузка..."],
+    ["TOP-3", "ТОП-3"],
+    ["Classic", "Классика"],
+    ["Action", "Экшен"],
+    ["Puzzle", "Головоломка"],
+    ["Arcade", "Аркада"],
+    ["Survival", "Выживание"],
+    ["Multiplayer", "Мультиплеер"],
+    ["Play Snake", "Играть в Snake"],
+    ["Play Shooter", "Играть в Shooter"],
+    ["Play 2042", "Играть в 2042"],
+    ["Play Pong", "Играть в Pong"],
+    ["Play Breakout", "Играть в Breakout"],
+    ["Play Dodger", "Играть в Dodger"],
+    ["Play 1v1 Pong", "Играть 1v1 Pong"],
+    ["Player Profile", "Профиль игрока"],
+    ["Daily Missions", "Ежедневные миссии"],
+    ["Achievements", "Достижения"],
+    ["Friends League", "Лига друзей"],
+    ["Your Uploaded Games", "Твои загруженные игры"],
+    ["Friends Co-op", "Кооператив с друзьями"],
+    ["Open Shop", "Открыть магазин"],
+    ["Inventory", "Инвентарь"],
+    ["Upload Game", "Загрузить игру"],
+    ["PC Upload Guide", "Гайд по загрузке с ПК"],
+    ["Create Your Skin (200 points)", "Создать свой скин (200 очков)"],
+    ["Leaderboard", "Лидерборд"],
+    ["Delete Account", "Удалить аккаунт"],
+    ["Back to login", "Назад к входу"],
+    ["Log out", "Выйти"],
+    ["Back to hub", "Назад в хаб"],
+    ["Restart", "Рестарт"],
+    ["Restart Match", "Перезапуск матча"],
+    ["Difficulty", "Сложность"],
+    ["Easy", "Легко"],
+    ["Medium", "Средне"],
+    ["Hard", "Сложно"],
+    ["Very Hard", "Очень сложно"],
+    ["Score", "Очки"],
+    ["Best", "Рекорд"],
+    ["Create Room", "Создать комнату"],
+    ["Join Room", "Войти в комнату"],
+    ["Join by code", "Войти по коду"],
+    ["Create Co-op", "Создать кооп"],
+    ["Leave Co-op", "Выйти из коопа"],
+    ["No active co-op room.", "Нет активной кооп-комнаты."],
+    ["No players yet.", "Пока нет игроков."],
+    ["No data yet.", "Пока нет данных."],
+    ["No incoming requests.", "Нет входящих заявок."],
+    ["No outgoing requests.", "Нет исходящих заявок."],
+    ["No uploaded games yet.", "Пока нет загруженных игр."],
+    ["Request sent.", "Заявка отправлена."],
+    ["Request accepted.", "Заявка принята."],
+    ["Request closed.", "Заявка закрыта."],
+    ["Incoming:", "Входящая:"],
+    ["Outgoing:", "Исходящая:"],
+    ["Accept", "Принять"],
+    ["Reject", "Отклонить"],
+    ["Cancel", "Отменить"],
+    ["Code", "Код"],
+    ["Status", "Статус"],
+    ["Total", "Итого"],
+    ["Room code", "Код комнаты"],
+    ["Skin Shop", "Магазин скинов"],
+    ["Inventory", "Инвентарь"],
+    ["My Created Skins", "Мои созданные скины"],
+    ["Uploaded Game", "Загруженная игра"],
+    ["Upload Game From PC", "Загрузка игры с ПК"],
+    ["Open PC Guide", "Открыть гайд по ПК"],
+    ["Open Upload Page", "Открыть страницу загрузки"],
+  ]);
+
+  const placeholderMap = new Map([
+    ["Friend username", "Ник друга"],
+    ["Friend username (optional)", "Ник друга (необязательно)"],
+    ["Room code", "Код комнаты"],
+    ["Room code (6 chars)", "Код комнаты (6 символов)"],
+    ["Game package file (.json)", "Файл игры (.json)"],
+  ]);
+
+  const translate = (value) => {
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    if (!trimmed) return value;
+    if (textMap.has(trimmed)) {
+      return value.replace(trimmed, textMap.get(trimmed));
+    }
+    return value;
+  };
+
+  const apply = (root = document) => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const blockedTags = new Set(["SCRIPT", "STYLE", "TEXTAREA", "CODE", "PRE"]);
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      const parent = node.parentElement;
+      if (!parent || blockedTags.has(parent.tagName)) continue;
+      const nextText = translate(node.nodeValue || "");
+      if (nextText !== node.nodeValue) node.nodeValue = nextText;
+    }
+
+    const inputs = root.querySelectorAll
+      ? root.querySelectorAll("input[placeholder], textarea[placeholder]")
+      : [];
+    for (const input of inputs) {
+      const p = input.getAttribute("placeholder");
+      if (p && placeholderMap.has(p)) {
+        input.setAttribute("placeholder", placeholderMap.get(p));
+      }
+    }
+  };
+
+  const titleMap = new Map([
+    ["Game Hub", "Игровой хаб"],
+    ["Shop", "Магазин"],
+    ["Inventory", "Инвентарь"],
+    ["Leaderboard", "Лидерборд"],
+    ["Create Skin", "Создать скин"],
+    ["Upload Game", "Загрузка игры"],
+    ["PC Upload Guide", "Гайд по загрузке с ПК"],
+    ["Uploaded Game", "Загруженная игра"],
+    ["Pong Online", "Pong Онлайн"],
+  ]);
+  if (titleMap.has(document.title)) {
+    document.title = titleMap.get(document.title);
+  }
+
+  apply(document);
+  const observer = new MutationObserver((mutations) => {
+    for (const m of mutations) {
+      for (const node of m.addedNodes) {
+        if (node.nodeType === Node.TEXT_NODE || node.nodeType === Node.ELEMENT_NODE) {
+          apply(node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement || document);
+        }
+      }
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+}
 
 function setMessage(messageEl, text, isError) {
   if (!messageEl) return;
@@ -51,7 +195,7 @@ function initAuthForm() {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      setMessage(messageEl, "Success. Redirecting...", false);
+      setMessage(messageEl, "Успешно. Перенаправление...", false);
       window.location.href = result.redirect || "/dashboard";
     } catch (error) {
       setMessage(messageEl, error.message, true);
@@ -95,7 +239,7 @@ async function initDashboard() {
     if (top3ListEl) {
       const rows = Array.isArray(leaderboard?.top) ? leaderboard.top.slice(0, 3) : [];
       if (!rows.length) {
-        top3ListEl.innerHTML = '<p class="top3-empty">No players yet.</p>';
+        top3ListEl.innerHTML = '<p class="top3-empty">Пока нет игроков.</p>';
       } else {
         top3ListEl.innerHTML = rows
           .map((row) => {
@@ -130,6 +274,8 @@ async function initHubExtras() {
   const missionsList = document.querySelector("[data-missions-list]");
   const achievementsList = document.querySelector("[data-achievements-list]");
   const friendsList = document.querySelector("[data-friends-list]");
+  const incomingList = document.querySelector("[data-friend-incoming]");
+  const outgoingList = document.querySelector("[data-friend-outgoing]");
   const continueBtn = document.querySelector("[data-continue-last]");
   const friendForm = document.querySelector("[data-friend-form]");
   const friendMsg = document.querySelector("[data-friend-message]");
@@ -139,7 +285,7 @@ async function initHubExtras() {
   const renderRows = (container, rows) => {
     if (!container) return;
     if (!rows.length) {
-      container.innerHTML = '<p class="hub-muted">No data yet.</p>';
+      container.innerHTML = '<p class="hub-muted">Пока нет данных.</p>';
       return;
     }
     container.innerHTML = rows
@@ -150,14 +296,14 @@ async function initHubExtras() {
   const load = async () => {
     const data = await requestJson("/api/player/home", { method: "GET" });
     if (profileLine) {
-      profileLine.textContent = `${data.profile.username} | Total points: ${data.profile.points} | Streak: ${data.profile.dailyStreak}`;
+      profileLine.textContent = `${data.profile.username} | Всего очков: ${data.profile.points} | Серия: ${data.profile.dailyStreak}`;
     }
     if (seasonLine) {
-      seasonLine.textContent = `Season points: ${data.profile.seasonPoints} | Season rank: #${data.profile.seasonRank}`;
+      seasonLine.textContent = `Сезонные очки: ${data.profile.seasonPoints} | Место в сезоне: #${data.profile.seasonRank}`;
     }
     lastGame = data.profile.lastGame || "/snake";
     if (lastGameLine) {
-      lastGameLine.textContent = `Last game: ${lastGame}`;
+      lastGameLine.textContent = `Последняя игра: ${lastGame}`;
     }
 
     renderRows(
@@ -185,10 +331,49 @@ async function initHubExtras() {
     );
   };
 
+  const loadFriendRequests = async () => {
+    if (!incomingList && !outgoingList) return;
+    try {
+      const data = await requestJson("/api/friends/requests", { method: "GET" });
+      const incoming = Array.isArray(data.incoming) ? data.incoming : [];
+      const outgoing = Array.isArray(data.outgoing) ? data.outgoing : [];
+
+      if (incomingList) {
+        if (!incoming.length) {
+          incomingList.innerHTML = '<p class="hub-muted">Нет входящих заявок.</p>';
+        } else {
+          incomingList.innerHTML = incoming
+            .map(
+              (r) =>
+                `<p class="hub-row"><span>Входящая: ${r.username}</span><span><button class="btn btn-ghost" type="button" data-request-accept="${r.id}">Принять</button> <button class="btn btn-ghost" type="button" data-request-reject="${r.id}">Отклонить</button></span></p>`
+            )
+            .join("");
+        }
+      }
+
+      if (outgoingList) {
+        if (!outgoing.length) {
+          outgoingList.innerHTML = '<p class="hub-muted">Нет исходящих заявок.</p>';
+        } else {
+          outgoingList.innerHTML = outgoing
+            .map(
+              (r) =>
+                `<p class="hub-row"><span>Исходящая: ${r.username}</span><button class="btn btn-ghost" type="button" data-request-cancel="${r.id}">Отменить</button></p>`
+            )
+            .join("");
+        }
+      }
+    } catch (_error) {
+      if (incomingList) incomingList.innerHTML = '<p class="hub-muted">Не удалось загрузить заявки.</p>';
+      if (outgoingList) outgoingList.innerHTML = '<p class="hub-muted">Не удалось загрузить заявки.</p>';
+    }
+  };
+
   try {
     await load();
+    await loadFriendRequests();
   } catch (_error) {
-    if (profileLine) profileLine.textContent = "Failed to load player data.";
+    if (profileLine) profileLine.textContent = "Не удалось загрузить данные игрока.";
   }
 
   if (continueBtn) {
@@ -204,24 +389,67 @@ async function initHubExtras() {
       const username = String(formData.get("username") || "").trim();
       if (!username) return;
       try {
-        await requestJson("/api/friends/add", {
+        await requestJson("/api/friends/request", {
           method: "POST",
           body: JSON.stringify({ username }),
         });
         if (friendMsg) {
-          friendMsg.textContent = "Friend added.";
+          friendMsg.textContent = "Заявка отправлена.";
           friendMsg.classList.remove("is-error");
           friendMsg.classList.add("is-success");
         }
         friendForm.reset();
+        await loadFriendRequests();
         await load();
       } catch (error) {
         if (friendMsg) {
-          friendMsg.textContent = error.message || "Failed to add friend.";
+          friendMsg.textContent = error.message || "Не удалось отправить заявку в друзья.";
           friendMsg.classList.remove("is-success");
           friendMsg.classList.add("is-error");
         }
       }
+    });
+  }
+
+  const onRequestAction = async (action, requestId) => {
+    if (!requestId) return;
+    try {
+      await requestJson(`/api/friends/requests/${requestId}/${action}`, {
+        method: "POST",
+      });
+      if (friendMsg) {
+        friendMsg.textContent = action === "accept" ? "Заявка принята." : "Заявка закрыта.";
+        friendMsg.classList.remove("is-error");
+        friendMsg.classList.add("is-success");
+      }
+      await loadFriendRequests();
+      await load();
+    } catch (error) {
+      if (friendMsg) {
+        friendMsg.textContent = error.message || "Action failed.";
+        friendMsg.classList.remove("is-success");
+        friendMsg.classList.add("is-error");
+      }
+    }
+  };
+
+  if (incomingList) {
+    incomingList.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const acceptId = target.getAttribute("data-request-accept");
+      const rejectId = target.getAttribute("data-request-reject");
+      if (acceptId) onRequestAction("accept", acceptId);
+      if (rejectId) onRequestAction("reject", rejectId);
+    });
+  }
+
+  if (outgoingList) {
+    outgoingList.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const cancelId = target.getAttribute("data-request-cancel");
+      if (cancelId) onRequestAction("reject", cancelId);
     });
   }
 }
@@ -251,7 +479,7 @@ function initDeleteAccount() {
     if (!password) return;
 
     const confirmDelete = window.confirm(
-      "Delete account permanently? This action cannot be undone."
+      "Удалить аккаунт навсегда? Это действие нельзя отменить."
     );
     if (!confirmDelete) return;
 
@@ -262,7 +490,7 @@ function initDeleteAccount() {
       });
       window.location.href = result.redirect || "/login";
     } catch (error) {
-      window.alert(error.message || "Failed to delete account.");
+      window.alert(error.message || "Не удалось удалить аккаунт.");
     }
   });
 }
@@ -313,7 +541,7 @@ async function initUploadedGames() {
     const data = await requestJson("/api/uploaded-games", { method: "GET" });
     const games = Array.isArray(data.games) ? data.games.slice(0, 12) : [];
     if (!games.length) {
-      list.innerHTML = '<p class="hub-muted">No uploaded games yet.</p>';
+      list.innerHTML = '<p class="hub-muted">Пока нет загруженных игр.</p>';
       return;
     }
     list.innerHTML = games
@@ -323,7 +551,7 @@ async function initUploadedGames() {
       )
       .join("");
   } catch (_error) {
-    list.innerHTML = '<p class="hub-muted">Failed to load uploaded games.</p>';
+    list.innerHTML = '<p class="hub-muted">Не удалось загрузить загруженные игры.</p>';
   }
 }
 
@@ -361,7 +589,7 @@ function initUploadGameForm() {
       } catch (_error) {
         setMessage(
           message,
-          "Cannot read file. Upload JSON package with title, description, htmlContent.",
+          "Не удалось прочитать файл. Загрузите JSON с полями title, description, htmlContent.",
           true
         );
       }
@@ -391,7 +619,7 @@ function initUploadGameForm() {
         }, 350);
       }
     } catch (error) {
-      setMessage(message, error.message || "Upload failed.", true);
+      setMessage(message, error.message || "Загрузка не удалась.", true);
     }
   });
 }
@@ -431,31 +659,31 @@ function initCoopPlay() {
     overlay.style.maxWidth = "260px";
     overlay.style.padding = "10px 12px";
     overlay.style.fontSize = "0.85rem";
-    overlay.innerHTML = '<p class="hub-muted">No active co-op room.</p>';
+    overlay.innerHTML = '<p class="hub-muted">Нет активной кооп-комнаты.</p>';
     document.body.appendChild(overlay);
   }
 
   const renderState = (room) => {
     if (!room) {
-      if (stateBox) stateBox.innerHTML = '<p class="hub-muted">No active co-op room.</p>';
-      if (overlay) overlay.innerHTML = '<p class="hub-muted">No active co-op room.</p>';
+      if (stateBox) stateBox.innerHTML = '<p class="hub-muted">Нет активной кооп-комнаты.</p>';
+      if (overlay) overlay.innerHTML = '<p class="hub-muted">Нет активной кооп-комнаты.</p>';
       return;
     }
     if (!stateBox && !overlay) return;
     stateBox.innerHTML = [
-      `<p class="hub-row"><span>Code</span><strong>${room.code}</strong></p>`,
-      `<p class="hub-row"><span>Status</span><strong>${room.status}</strong></p>`,
+      `<p class="hub-row"><span>Код</span><strong>${room.code}</strong></p>`,
+      `<p class="hub-row"><span>Статус</span><strong>${room.status}</strong></p>`,
       `<p class="hub-row"><span>${room.players.host}</span><strong>${room.points.host}</strong></p>`,
       `<p class="hub-row"><span>${room.players.friend}</span><strong>${room.points.friend}</strong></p>`,
-      `<p class="hub-row"><span>Total</span><strong>${room.points.total}</strong></p>`,
+      `<p class="hub-row"><span>Итого</span><strong>${room.points.total}</strong></p>`,
     ].join("");
 
     if (overlay) {
       overlay.innerHTML = [
-        `<p class="hub-row"><span>Co-op ${room.code}</span><strong>${room.status}</strong></p>`,
+        `<p class="hub-row"><span>Кооп ${room.code}</span><strong>${room.status}</strong></p>`,
         `<p class="hub-row"><span>${room.players.host}</span><strong>${room.points.host}</strong></p>`,
         `<p class="hub-row"><span>${room.players.friend}</span><strong>${room.points.friend}</strong></p>`,
-        `<p class="hub-row"><span>Total</span><strong>${room.points.total}</strong></p>`,
+        `<p class="hub-row"><span>Итого</span><strong>${room.points.total}</strong></p>`,
       ].join("");
     }
   };
@@ -463,7 +691,7 @@ function initCoopPlay() {
   const poll = async () => {
     if (!code) {
       renderState(null);
-      if (overlay) overlay.innerHTML = '<p class="hub-muted">No active co-op room.</p>';
+      if (overlay) overlay.innerHTML = '<p class="hub-muted">Нет активной кооп-комнаты.</p>';
       return;
     }
     try {
@@ -475,7 +703,7 @@ function initCoopPlay() {
       code = "";
       localStorage.removeItem(COOP_KEY);
       renderState(null);
-      if (overlay) overlay.innerHTML = '<p class="hub-muted">Co-op room expired.</p>';
+      if (overlay) overlay.innerHTML = '<p class="hub-muted">Кооп-комната истекла.</p>';
     }
   };
 
@@ -490,7 +718,6 @@ function initCoopPlay() {
       setMessage(message, "", false);
       const formData = new FormData(createForm);
       const friendUsername = String(formData.get("friendUsername") || "").trim();
-      if (!friendUsername) return;
       try {
         const created = await requestJson("/api/coop/create", {
           method: "POST",
@@ -498,10 +725,10 @@ function initCoopPlay() {
         });
         code = created.code;
         localStorage.setItem(COOP_KEY, code);
-        setMessage(message, `Co-op room created: ${code}`, false);
+        setMessage(message, `Кооп-комната создана: ${code}`, false);
         await poll();
       } catch (error) {
-        setMessage(message, error.message || "Failed to create co-op room.", true);
+        setMessage(message, error.message || "Не удалось создать кооп-комнату.", true);
       }
     });
   }
@@ -520,10 +747,10 @@ function initCoopPlay() {
         });
         code = joinCode;
         localStorage.setItem(COOP_KEY, code);
-        setMessage(message, `Joined room: ${code}`, false);
+        setMessage(message, `Вы вошли в комнату: ${code}`, false);
         await poll();
       } catch (error) {
-        setMessage(message, error.message || "Failed to join room.", true);
+        setMessage(message, error.message || "Не удалось войти в комнату.", true);
       }
     });
   }
@@ -571,7 +798,7 @@ function initCoopPlay() {
   if (leaveBtn) {
     leaveBtn.addEventListener("click", async () => {
       await window.CoopPlay.leave();
-      setMessage(message, "Co-op room closed.", false);
+      setMessage(message, "Кооп-комната закрыта.", false);
     });
   }
 
@@ -607,6 +834,7 @@ function initLastGameResume() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  initRussianLocale();
   initAuthForm();
   initPasswordToggles();
   initDashboard();

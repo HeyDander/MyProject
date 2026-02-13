@@ -6,7 +6,7 @@
 
   const slug = (window.location.pathname.split("/").pop() || "").trim();
   if (!slug) {
-    stage.innerHTML = '<p class="hub-muted">Game id is missing.</p>';
+    stage.innerHTML = '<p class="hub-muted">Отсутствует id игры.</p>';
     return;
   }
 
@@ -17,7 +17,7 @@
   window
     .requestJson(`/api/uploaded-games/${encodeURIComponent(slug)}`, { method: "GET" })
     .then((game) => {
-      if (titleEl) titleEl.textContent = game.title || "Uploaded Game";
+      if (titleEl) titleEl.textContent = game.title || "Загруженная игра";
       if (metaEl) {
         const by = game.creator ? `by ${game.creator}` : "";
         metaEl.textContent = [by, game.description || ""].filter(Boolean).join(" | ");
@@ -31,6 +31,6 @@
       stage.replaceChildren(frame);
     })
     .catch((error) => {
-      renderError(error.message || "Failed to load uploaded game.");
+      renderError(error.message || "Не удалось загрузить загруженную игру.");
     });
 })();
