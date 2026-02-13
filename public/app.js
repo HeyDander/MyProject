@@ -536,30 +536,7 @@ function initLastGameResume() {
       LAST_GAME_KEY,
       `${window.location.pathname}${window.location.search}${window.location.hash}`
     );
-    return;
   }
-
-  if (path !== "/dashboard") return;
-  const target = localStorage.getItem(LAST_GAME_KEY);
-  if (!target || typeof target !== "string") return;
-
-  const isValidTarget =
-    target === "/snake" ||
-    target === "/shooter" ||
-    target === "/2042" ||
-    target === "/pong" ||
-    target === "/breakout" ||
-    target === "/dodger" ||
-    target.startsWith("/uploaded/") ||
-    target.startsWith("/game/");
-
-  if (!isValidTarget) return;
-
-  // Skip redirect if user just arrived from auth pages and wants hub first.
-  const fromAuth = document.referrer.includes("/login") || document.referrer.includes("/register");
-  if (fromAuth) return;
-
-  window.location.replace(target);
 }
 
 document.addEventListener("DOMContentLoaded", () => {
