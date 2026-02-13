@@ -10,7 +10,8 @@
     "mobile:install": "npm --prefix mobile-app install",
     "mobile:start": "npm --prefix mobile-app run start",
     "mobile:android": "npm --prefix mobile-app run android",
-    "mobile:ios": "npm --prefix mobile-app run ios"
+    "mobile:ios": "npm --prefix mobile-app run ios",
+    "mobile:apk": "npm --prefix mobile-app run build:apk"
   },
   "keywords": [],
   "author": "",

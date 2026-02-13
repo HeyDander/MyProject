@@ -59,6 +59,24 @@ function initAuthForm() {
   });
 }
 
+function initPasswordToggles() {
+  const toggles = document.querySelectorAll("[data-toggle-password]");
+  if (!toggles.length) return;
+
+  for (const toggle of toggles) {
+    const targetId = toggle.getAttribute("data-target");
+    if (!targetId) continue;
+    const input = document.getElementById(targetId);
+    if (!input) continue;
+
+    toggle.addEventListener("click", () => {
+      const isHidden = input.type === "password";
+      input.type = isHidden ? "text" : "password";
+      toggle.textContent = isHidden ? "Hide" : "Show";
+    });
+  }
+}
+
 async function initDashboard() {
   const root = document.querySelector("[data-dashboard]");
   if (!root) return;
@@ -168,6 +186,7 @@ function preventPageScrollKeys() {
 
 document.addEventListener("DOMContentLoaded", () => {
   initAuthForm();
+  initPasswordToggles();
   initDashboard();
   initLogout();
   initDeleteAccount();

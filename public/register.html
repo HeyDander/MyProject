@@ -51,14 +51,19 @@
           />
 
           <label for="password">Password</label>
-          <input
-            type="password"
-            id="password"
-            name="password"
-            placeholder="At least 8 characters"
-            minlength="8"
-            required
-          />
+          <div class="password-wrap">
+            <input
+              type="password"
+              id="password"
+              name="password"
+              placeholder="At least 8 characters"
+              minlength="8"
+              required
+            />
+            <button type="button" class="password-toggle" data-toggle-password data-target="password">
+              Show
+            </button>
+          </div>
 
           <div class="form-meta">
             <label class="remember">

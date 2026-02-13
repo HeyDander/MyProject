@@ -1,0 +1,6 @@
+*.apk
+*.aab
+node_modules/
+mobile-app/node_modules/
+data/auth.db
+mobile-app/.expo/

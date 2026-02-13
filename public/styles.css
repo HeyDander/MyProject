@@ -160,6 +160,33 @@ body {
   box-shadow: 0 0 0 3px rgba(80, 150, 110, 0.18);
 }
 
+.password-wrap {
+  position: relative;
+}
+
+.password-wrap input {
+  padding-right: 88px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(106, 149, 125, 0.45);
+  background: rgba(34, 58, 46, 0.6);
+  color: #d9ebe0;
+  font-size: 0.84rem;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.password-toggle:hover {
+  background: rgba(54, 94, 73, 0.72);
+}
+
 .form-meta {
   display: flex;
   align-items: center;

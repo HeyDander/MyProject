@@ -16,12 +16,18 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.heydander.gamehubmobile",
       "adaptiveIcon": {
         "backgroundColor": "#0b130f"
       }
     },
     "plugins": [
       "expo-asset"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "fefae01f-1982-4547-81a9-a95c720a907e"
+      }
+    }
   }
 }
