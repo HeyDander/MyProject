@@ -396,6 +396,193 @@ function initUploadGameForm() {
   });
 }
 
+function initCoopPlay() {
+  const COOP_KEY = "coop-room-code";
+  const path = window.location.pathname;
+  const isGamePath =
+    path === "/snake" ||
+    path === "/shooter" ||
+    path === "/2042" ||
+    path === "/pong" ||
+    path === "/pong-online" ||
+    path === "/breakout" ||
+    path === "/dodger" ||
+    path.startsWith("/uploaded/") ||
+    path.startsWith("/game/");
+
+  const createForm = document.querySelector("[data-coop-create-form]");
+  const joinForm = document.querySelector("[data-coop-join-form]");
+  const stateBox = document.querySelector("[data-coop-state]");
+  const message = document.querySelector("[data-coop-message]");
+  const leaveBtn = document.querySelector("[data-coop-leave]");
+
+  let code = localStorage.getItem(COOP_KEY) || "";
+  let pollTimer = 0;
+  let sending = false;
+  let overlay = null;
+
+  if (isGamePath) {
+    overlay = document.createElement("div");
+    overlay.className = "hub-extra-card";
+    overlay.style.position = "fixed";
+    overlay.style.left = "12px";
+    overlay.style.bottom = "12px";
+    overlay.style.zIndex = "80";
+    overlay.style.maxWidth = "260px";
+    overlay.style.padding = "10px 12px";
+    overlay.style.fontSize = "0.85rem";
+    overlay.innerHTML = '<p class="hub-muted">No active co-op room.</p>';
+    document.body.appendChild(overlay);
+  }
+
+  const renderState = (room) => {
+    if (!room) {
+      if (stateBox) stateBox.innerHTML = '<p class="hub-muted">No active co-op room.</p>';
+      if (overlay) overlay.innerHTML = '<p class="hub-muted">No active co-op room.</p>';
+      return;
+    }
+    if (!stateBox && !overlay) return;
+    stateBox.innerHTML = [
+      `<p class="hub-row"><span>Code</span><strong>${room.code}</strong></p>`,
+      `<p class="hub-row"><span>Status</span><strong>${room.status}</strong></p>`,
+      `<p class="hub-row"><span>${room.players.host}</span><strong>${room.points.host}</strong></p>`,
+      `<p class="hub-row"><span>${room.players.friend}</span><strong>${room.points.friend}</strong></p>`,
+      `<p class="hub-row"><span>Total</span><strong>${room.points.total}</strong></p>`,
+    ].join("");
+
+    if (overlay) {
+      overlay.innerHTML = [
+        `<p class="hub-row"><span>Co-op ${room.code}</span><strong>${room.status}</strong></p>`,
+        `<p class="hub-row"><span>${room.players.host}</span><strong>${room.points.host}</strong></p>`,
+        `<p class="hub-row"><span>${room.players.friend}</span><strong>${room.points.friend}</strong></p>`,
+        `<p class="hub-row"><span>Total</span><strong>${room.points.total}</strong></p>`,
+      ].join("");
+    }
+  };
+
+  const poll = async () => {
+    if (!code) {
+      renderState(null);
+      if (overlay) overlay.innerHTML = '<p class="hub-muted">No active co-op room.</p>';
+      return;
+    }
+    try {
+      const room = await requestJson(`/api/coop/state/${encodeURIComponent(code)}`, {
+        method: "GET",
+      });
+      renderState(room);
+    } catch (_error) {
+      code = "";
+      localStorage.removeItem(COOP_KEY);
+      renderState(null);
+      if (overlay) overlay.innerHTML = '<p class="hub-muted">Co-op room expired.</p>';
+    }
+  };
+
+  const startPoll = () => {
+    if (pollTimer) return;
+    pollTimer = window.setInterval(poll, 1500);
+  };
+
+  if (createForm) {
+    createForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      setMessage(message, "", false);
+      const formData = new FormData(createForm);
+      const friendUsername = String(formData.get("friendUsername") || "").trim();
+      if (!friendUsername) return;
+      try {
+        const created = await requestJson("/api/coop/create", {
+          method: "POST",
+          body: JSON.stringify({ friendUsername }),
+        });
+        code = created.code;
+        localStorage.setItem(COOP_KEY, code);
+        setMessage(message, `Co-op room created: ${code}`, false);
+        await poll();
+      } catch (error) {
+        setMessage(message, error.message || "Failed to create co-op room.", true);
+      }
+    });
+  }
+
+  if (joinForm) {
+    joinForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      setMessage(message, "", false);
+      const formData = new FormData(joinForm);
+      const joinCode = String(formData.get("code") || "").trim().toUpperCase();
+      if (!joinCode) return;
+      try {
+        await requestJson("/api/coop/join", {
+          method: "POST",
+          body: JSON.stringify({ code: joinCode }),
+        });
+        code = joinCode;
+        localStorage.setItem(COOP_KEY, code);
+        setMessage(message, `Joined room: ${code}`, false);
+        await poll();
+      } catch (error) {
+        setMessage(message, error.message || "Failed to join room.", true);
+      }
+    });
+  }
+
+  window.CoopPlay = {
+    async addPoints(points, game) {
+      if (!isGamePath || !code || sending) return;
+      const amount = Number(points);
+      if (!Number.isInteger(amount) || amount <= 0) return;
+      sending = true;
+      try {
+        await requestJson("/api/coop/add-points", {
+          method: "POST",
+          body: JSON.stringify({
+            code,
+            points: amount,
+            game: String(game || window.location.pathname).slice(0, 64),
+          }),
+        });
+      } catch (_error) {
+        // Ignore coop sync errors to not interrupt game.
+      } finally {
+        sending = false;
+      }
+    },
+    getCode() {
+      return code;
+    },
+    async leave() {
+      if (!code) return;
+      try {
+        await requestJson("/api/coop/leave", {
+          method: "POST",
+          body: JSON.stringify({ code }),
+        });
+      } catch (_error) {
+        // ignore
+      }
+      code = "";
+      localStorage.removeItem(COOP_KEY);
+      renderState(null);
+    },
+  };
+
+  if (leaveBtn) {
+    leaveBtn.addEventListener("click", async () => {
+      await window.CoopPlay.leave();
+      setMessage(message, "Co-op room closed.", false);
+    });
+  }
+
+  if (code) {
+    poll();
+    startPoll();
+  } else if (stateBox) {
+    renderState(null);
+  }
+}
+
 function initLastGameResume() {
   const LAST_GAME_KEY = "last-game-path";
   const path = window.location.pathname;
@@ -405,6 +592,7 @@ function initLastGameResume() {
     path === "/shooter" ||
     path === "/2042" ||
     path === "/pong" ||
+    path === "/pong-online" ||
     path === "/breakout" ||
     path === "/dodger" ||
     path.startsWith("/uploaded/") ||
@@ -430,5 +618,6 @@ document.addEventListener("DOMContentLoaded", () => {
   initMobileGamepad();
   initUploadedGames();
   initUploadGameForm();
+  initCoopPlay();
   initLastGameResume();
 });

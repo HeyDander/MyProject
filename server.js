@@ -13,6 +13,11 @@ const MAX_CHALLENGE_GAMES = 10;
 const MAX_SKINS = 50;
 const CUSTOM_SKIN_ID_PREFIX = "custom-";
 const CREATOR_UNLOCK_POINTS = 200;
+const PONG_TARGET_SCORE = 7;
+const PONG_ROOM_TTL_MS = 1000 * 60 * 30;
+const PONG_ROOM_IDLE_DROP_MS = 1000 * 60 * 10;
+const COOP_ROOM_TTL_MS = 1000 * 60 * 60 * 6;
+const COOP_ROOM_IDLE_DROP_MS = 1000 * 60 * 30;
 const DAILY_MISSIONS = [
   { id: "daily_points_120", label: "Earn 120 points today", type: "day_points", target: 120 },
   { id: "daily_points_260", label: "Earn 260 points today", type: "day_points", target: 260 },
@@ -162,6 +167,9 @@ app.use(
 
 app.use(express.static(path.join(__dirname, "public")));
 
+const pongRooms = new Map();
+const coopRooms = new Map();
+
 async function dbQuery(text, params = []) {
   return pool.query(text, params);
 }
@@ -231,6 +239,164 @@ function currentEvent() {
     description: "Keep your streak active and unlock mission bonuses.",
     multiplier: 1,
   };
+}
+
+function cleanupPongRooms() {
+  const now = Date.now();
+  for (const [code, room] of pongRooms.entries()) {
+    if (now - room.createdAt > PONG_ROOM_TTL_MS || now - room.updatedAt > PONG_ROOM_IDLE_DROP_MS) {
+      pongRooms.delete(code);
+    }
+  }
+}
+
+function makePongCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 6; i += 1) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
+
+function makeRoomCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 6; i += 1) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function cleanupCoopRooms() {
+  const now = Date.now();
+  for (const [code, room] of coopRooms.entries()) {
+    if (now - room.createdAt > COOP_ROOM_TTL_MS || now - room.updatedAt > COOP_ROOM_IDLE_DROP_MS) {
+      coopRooms.delete(code);
+    }
+  }
+}
+
+function coopRole(room, userId) {
+  if (Number(room.hostUserId) === Number(userId)) return "host";
+  if (Number(room.friendUserId) === Number(userId)) return "friend";
+  return "";
+}
+
+function newPongBall(direction = 1) {
+  return {
+    x: 360,
+    y: 210,
+    vx: direction * (3.8 + Math.random() * 0.9),
+    vy: (Math.random() * 2.8 - 1.4) || 1.1,
+    r: 8,
+  };
+}
+
+function makePongRoom(hostUserId, hostUsername) {
+  return {
+    code: "",
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    lastTickAt: Date.now(),
+    status: "waiting",
+    winner: null,
+    hostUserId,
+    guestUserId: null,
+    hostName: hostUsername,
+    guestName: "",
+    hostY: 168,
+    guestY: 168,
+    hostScore: 0,
+    guestScore: 0,
+    ball: newPongBall(Math.random() > 0.5 ? 1 : -1),
+  };
+}
+
+function getPongRole(room, userId) {
+  if (Number(room.hostUserId) === Number(userId)) return "host";
+  if (Number(room.guestUserId) === Number(userId)) return "guest";
+  return "";
+}
+
+function resetPongRoom(room) {
+  room.status = room.guestUserId ? "playing" : "waiting";
+  room.winner = null;
+  room.hostY = 168;
+  room.guestY = 168;
+  room.hostScore = 0;
+  room.guestScore = 0;
+  room.ball = newPongBall(Math.random() > 0.5 ? 1 : -1);
+  room.updatedAt = Date.now();
+  room.lastTickAt = Date.now();
+}
+
+function tickPongRoom(room) {
+  if (room.status !== "playing") return;
+  const now = Date.now();
+  const dtMs = clamp(now - room.lastTickAt, 8, 40);
+  room.lastTickAt = now;
+  const step = dtMs / 16.6667;
+  const ball = room.ball;
+
+  ball.x += ball.vx * step;
+  ball.y += ball.vy * step;
+  const boardH = 420;
+  if (ball.y - ball.r < 0) {
+    ball.y = ball.r;
+    ball.vy = Math.abs(ball.vy);
+  }
+  if (ball.y + ball.r > boardH) {
+    ball.y = boardH - ball.r;
+    ball.vy = -Math.abs(ball.vy);
+  }
+
+  const paddleH = 84;
+  const hostPaddle = { x: 24, y: room.hostY, w: 12, h: paddleH };
+  const guestPaddle = { x: 684, y: room.guestY, w: 12, h: paddleH };
+
+  const intersects = (p) =>
+    ball.x - ball.r < p.x + p.w &&
+    ball.x + ball.r > p.x &&
+    ball.y + ball.r > p.y &&
+    ball.y - ball.r < p.y + p.h;
+
+  if (ball.vx < 0 && intersects(hostPaddle)) {
+    const t = (ball.y - (hostPaddle.y + hostPaddle.h / 2)) / (hostPaddle.h / 2);
+    ball.vx = Math.abs(ball.vx) + 0.08;
+    ball.vy += t * 0.8;
+    ball.x = hostPaddle.x + hostPaddle.w + ball.r + 1;
+  }
+  if (ball.vx > 0 && intersects(guestPaddle)) {
+    const t = (ball.y - (guestPaddle.y + guestPaddle.h / 2)) / (guestPaddle.h / 2);
+    ball.vx = -(Math.abs(ball.vx) + 0.08);
+    ball.vy += t * 0.8;
+    ball.x = guestPaddle.x - ball.r - 1;
+  }
+
+  if (ball.x < -20) {
+    room.guestScore += 1;
+    if (room.guestScore >= PONG_TARGET_SCORE) {
+      room.status = "finished";
+      room.winner = "guest";
+      return;
+    }
+    room.ball = newPongBall(-1);
+  }
+
+  if (ball.x > 740) {
+    room.hostScore += 1;
+    if (room.hostScore >= PONG_TARGET_SCORE) {
+      room.status = "finished";
+      room.winner = "host";
+      return;
+    }
+    room.ball = newPongBall(1);
+  }
 }
 
 async function unlockAchievements(userId, progress) {
@@ -779,6 +945,10 @@ app.get("/pong", requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "public", "pong.html"));
 });
 
+app.get("/pong-online", requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "pong-online.html"));
+});
+
 app.get("/breakout", requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "public", "breakout.html"));
 });
@@ -993,6 +1163,292 @@ app.post("/api/friends/add", async (req, res) => {
   );
 
   return res.json({ ok: true });
+});
+
+app.post("/api/coop/create", async (req, res) => {
+  if (!isAuthed(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  cleanupCoopRooms();
+  const friendUsername = normalizeUsername(req.body.friendUsername);
+  if (!friendUsername || friendUsername.length < 3) {
+    return res.status(400).json({ error: "Enter a valid friend username." });
+  }
+
+  const me = await dbGet("SELECT id, username FROM users WHERE id = $1", [req.session.userId]);
+  if (!me) return res.status(404).json({ error: "User not found." });
+
+  const friend = await dbGet("SELECT id, username FROM users WHERE lower(username) = lower($1)", [
+    friendUsername,
+  ]);
+  if (!friend) {
+    return res.status(404).json({ error: "Friend not found." });
+  }
+  if (Number(friend.id) === Number(req.session.userId)) {
+    return res.status(400).json({ error: "You cannot create coop with yourself." });
+  }
+
+  const relation = await dbGet(
+    "SELECT 1 FROM friend_links WHERE user_id = $1 AND friend_user_id = $2",
+    [req.session.userId, friend.id]
+  );
+  if (!relation) {
+    return res.status(403).json({ error: "Add this player to friends first." });
+  }
+
+  let code = makeRoomCode();
+  while (coopRooms.has(code)) code = makeRoomCode();
+  coopRooms.set(code, {
+    code,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    status: "waiting",
+    hostUserId: Number(req.session.userId),
+    friendUserId: Number(friend.id),
+    hostName: me.username || `player-${me.id}`,
+    friendName: friend.username || `player-${friend.id}`,
+    hostPoints: 0,
+    friendPoints: 0,
+    hostLastGame: "",
+    friendLastGame: "",
+  });
+
+  return res.json({ ok: true, code, role: "host" });
+});
+
+app.post("/api/coop/join", async (req, res) => {
+  if (!isAuthed(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  cleanupCoopRooms();
+  const code = String(req.body.code || "").trim().toUpperCase();
+  if (!/^[A-Z0-9]{6}$/.test(code)) {
+    return res.status(400).json({ error: "Invalid room code." });
+  }
+  const room = coopRooms.get(code);
+  if (!room) return res.status(404).json({ error: "Room not found or expired." });
+
+  const role = coopRole(room, req.session.userId);
+  if (!role) return res.status(403).json({ error: "This room is not for your account." });
+  if (role === "friend") room.status = "active";
+  room.updatedAt = Date.now();
+
+  return res.json({ ok: true, code, role });
+});
+
+app.get("/api/coop/state/:code", async (req, res) => {
+  if (!isAuthed(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  cleanupCoopRooms();
+  const code = String(req.params.code || "").trim().toUpperCase();
+  if (!/^[A-Z0-9]{6}$/.test(code)) {
+    return res.status(400).json({ error: "Invalid room code." });
+  }
+  const room = coopRooms.get(code);
+  if (!room) return res.status(404).json({ error: "Room not found or expired." });
+  const role = coopRole(room, req.session.userId);
+  if (!role) return res.status(403).json({ error: "Not in this room." });
+
+  room.updatedAt = Date.now();
+  return res.json({
+    ok: true,
+    code,
+    role,
+    status: room.status,
+    players: {
+      host: room.hostName,
+      friend: room.friendName,
+    },
+    points: {
+      host: room.hostPoints,
+      friend: room.friendPoints,
+      total: room.hostPoints + room.friendPoints,
+    },
+    lastGame: {
+      host: room.hostLastGame,
+      friend: room.friendLastGame,
+    },
+  });
+});
+
+app.post("/api/coop/add-points", async (req, res) => {
+  if (!isAuthed(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  const code = String(req.body.code || "").trim().toUpperCase();
+  const points = Number(req.body.points || 0);
+  const game = String(req.body.game || "").slice(0, 64);
+  if (!/^[A-Z0-9]{6}$/.test(code)) {
+    return res.status(400).json({ error: "Invalid room code." });
+  }
+  if (!Number.isInteger(points) || points <= 0 || points > 10000) {
+    return res.status(400).json({ error: "Invalid points value." });
+  }
+
+  const room = coopRooms.get(code);
+  if (!room) return res.status(404).json({ error: "Room not found or expired." });
+  const role = coopRole(room, req.session.userId);
+  if (!role) return res.status(403).json({ error: "Not in this room." });
+
+  if (role === "host") {
+    room.hostPoints += points;
+    room.hostLastGame = game;
+  } else {
+    room.friendPoints += points;
+    room.friendLastGame = game;
+    room.status = "active";
+  }
+  room.updatedAt = Date.now();
+  return res.json({ ok: true });
+});
+
+app.post("/api/coop/leave", async (req, res) => {
+  if (!isAuthed(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  const code = String(req.body.code || "").trim().toUpperCase();
+  if (!/^[A-Z0-9]{6}$/.test(code)) {
+    return res.status(400).json({ error: "Invalid room code." });
+  }
+  const room = coopRooms.get(code);
+  if (!room) return res.json({ ok: true });
+  const role = coopRole(room, req.session.userId);
+  if (!role) return res.json({ ok: true });
+  coopRooms.delete(code);
+  return res.json({ ok: true });
+});
+
+app.post("/api/multiplayer/pong/create", async (req, res) => {
+  if (!isAuthed(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  cleanupPongRooms();
+  const me = await dbGet("SELECT username FROM users WHERE id = $1", [req.session.userId]);
+  let code = makePongCode();
+  while (pongRooms.has(code)) {
+    code = makePongCode();
+  }
+  const room = makePongRoom(req.session.userId, me?.username || `player-${req.session.userId}`);
+  room.code = code;
+  pongRooms.set(code, room);
+
+  return res.json({ ok: true, code, role: "host" });
+});
+
+app.post("/api/multiplayer/pong/join", async (req, res) => {
+  if (!isAuthed(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  cleanupPongRooms();
+  const code = String(req.body.code || "").trim().toUpperCase();
+  if (!/^[A-Z0-9]{6}$/.test(code)) {
+    return res.status(400).json({ error: "Invalid room code." });
+  }
+
+  const room = pongRooms.get(code);
+  if (!room) return res.status(404).json({ error: "Room not found or expired." });
+
+  const role = getPongRole(room, req.session.userId);
+  if (role) {
+    room.updatedAt = Date.now();
+    return res.json({ ok: true, code, role });
+  }
+  if (room.guestUserId) {
+    return res.status(409).json({ error: "Room already has 2 players." });
+  }
+
+  const me = await dbGet("SELECT username FROM users WHERE id = $1", [req.session.userId]);
+  room.guestUserId = req.session.userId;
+  room.guestName = me?.username || `player-${req.session.userId}`;
+  resetPongRoom(room);
+  room.updatedAt = Date.now();
+  return res.json({ ok: true, code, role: "guest" });
+});
+
+app.post("/api/multiplayer/pong/input", async (req, res) => {
+  if (!isAuthed(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const code = String(req.body.code || "").trim().toUpperCase();
+  const y = Number(req.body.y);
+  if (!/^[A-Z0-9]{6}$/.test(code) || !Number.isFinite(y)) {
+    return res.status(400).json({ error: "Invalid input." });
+  }
+
+  const room = pongRooms.get(code);
+  if (!room) return res.status(404).json({ error: "Room not found." });
+  const role = getPongRole(room, req.session.userId);
+  if (!role) return res.status(403).json({ error: "Not in this room." });
+
+  if (role === "host") room.hostY = clamp(y, 0, 420 - 84);
+  if (role === "guest") room.guestY = clamp(y, 0, 420 - 84);
+  room.updatedAt = Date.now();
+  return res.json({ ok: true });
+});
+
+app.post("/api/multiplayer/pong/restart", async (req, res) => {
+  if (!isAuthed(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  const code = String(req.body.code || "").trim().toUpperCase();
+  if (!/^[A-Z0-9]{6}$/.test(code)) {
+    return res.status(400).json({ error: "Invalid room code." });
+  }
+  const room = pongRooms.get(code);
+  if (!room) return res.status(404).json({ error: "Room not found." });
+  const role = getPongRole(room, req.session.userId);
+  if (!role) return res.status(403).json({ error: "Not in this room." });
+  if (!room.guestUserId) {
+    return res.status(400).json({ error: "Need second player first." });
+  }
+  resetPongRoom(room);
+  return res.json({ ok: true });
+});
+
+app.get("/api/multiplayer/pong/state/:code", async (req, res) => {
+  if (!isAuthed(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  cleanupPongRooms();
+  const code = String(req.params.code || "").trim().toUpperCase();
+  if (!/^[A-Z0-9]{6}$/.test(code)) {
+    return res.status(400).json({ error: "Invalid room code." });
+  }
+  const room = pongRooms.get(code);
+  if (!room) return res.status(404).json({ error: "Room not found or expired." });
+
+  const role = getPongRole(room, req.session.userId);
+  if (!role) return res.status(403).json({ error: "Not in this room." });
+  tickPongRoom(room);
+  room.updatedAt = Date.now();
+
+  return res.json({
+    ok: true,
+    code,
+    role,
+    status: room.status,
+    winner: room.winner,
+    players: {
+      host: room.hostName || "Host",
+      guest: room.guestName || "Guest",
+    },
+    paddles: {
+      hostY: room.hostY,
+      guestY: room.guestY,
+      h: 84,
+    },
+    ball: room.ball,
+    scores: {
+      host: room.hostScore,
+      guest: room.guestScore,
+    },
+  });
 });
 
 app.get("/api/progress", async (req, res) => {

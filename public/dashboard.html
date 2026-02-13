@@ -65,6 +65,13 @@
             <a class="btn" href="/pong">Play Pong</a>
           </article>
 
+          <article class="game-item game-tone-pong">
+            <p class="game-tag">Multiplayer</p>
+            <h2>Pong Online</h2>
+            <p>Create room code and play real-time 1v1 with your friend.</p>
+            <a class="btn" href="/pong-online">Play 1v1 Pong</a>
+          </article>
+
           <article class="game-item game-tone-breakout">
             <p class="game-tag">Arcade</p>
             <h2>Breakout</h2>
@@ -128,6 +135,37 @@
             <div class="hub-list" data-uploaded-games-list>
               <p class="hub-muted">Loading uploaded games...</p>
             </div>
+          </article>
+
+          <article class="hub-extra-card">
+            <h2>Friends Co-op</h2>
+            <form class="friend-form" data-coop-create-form>
+              <input
+                type="text"
+                name="friendUsername"
+                placeholder="Friend username"
+                minlength="3"
+                maxlength="24"
+                required
+              />
+              <button class="btn" type="submit">Create Co-op</button>
+            </form>
+            <form class="friend-form" data-coop-join-form>
+              <input
+                type="text"
+                name="code"
+                placeholder="Room code"
+                minlength="6"
+                maxlength="6"
+                required
+              />
+              <button class="btn btn-ghost" type="submit">Join by code</button>
+            </form>
+            <div class="hub-list" data-coop-state>
+              <p class="hub-muted">No active co-op room.</p>
+            </div>
+            <button class="btn btn-ghost" type="button" data-coop-leave>Leave Co-op</button>
+            <p class="shop-message" data-coop-message aria-live="polite"></p>
           </article>
         </section>
 

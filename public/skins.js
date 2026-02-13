@@ -501,6 +501,10 @@ function awardPoints(points) {
   skinState.pendingPoints += normalized;
   updateProgressUI();
 
+  if (window.CoopPlay && typeof window.CoopPlay.addPoints === "function") {
+    window.CoopPlay.addPoints(normalized, window.location.pathname);
+  }
+
   if (skinState.flushTimer) {
     clearTimeout(skinState.flushTimer);
   }
