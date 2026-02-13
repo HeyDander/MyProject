@@ -1,9 +1,8 @@
 const path = require("path");
-const fs = require("fs");
 const express = require("express");
 const session = require("express-session");
 const bcrypt = require("bcryptjs");
-const Database = require("better-sqlite3");
+const { Pool } = require("pg");
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
 
@@ -126,74 +125,10 @@ for (const id of Object.keys(SKIN_CATALOG)) {
 }
 Object.assign(SKIN_CATALOG, rebuiltSkinCatalog);
 
-const dataDir = path.join(__dirname, "data");
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
-
-const db = new Database(path.join(dataDir, "auth.db"));
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    email TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-  )
-`);
-const userColumns = db.prepare("PRAGMA table_info(users)").all();
-if (!userColumns.some((col) => col.name === "username")) {
-  db.exec("ALTER TABLE users ADD COLUMN username TEXT");
-}
-const addedEmailVerifiedColumn = !userColumns.some((col) => col.name === "email_verified");
-if (addedEmailVerifiedColumn) {
-  db.exec("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0");
-}
-if (addedEmailVerifiedColumn) {
-  db.exec("UPDATE users SET email_verified = 1");
-}
-const usersWithoutUsername = db
-  .prepare("SELECT id, email FROM users WHERE username IS NULL OR TRIM(username) = ''")
-  .all();
-for (const row of usersWithoutUsername) {
-  const base = String(row.email || "")
-    .split("@")[0]
-    .replace(/[^a-zA-Z0-9_-]/g, "")
-    .slice(0, 20);
-  const username = base ? `${base}-${row.id}` : `player-${row.id}`;
-  db.prepare("UPDATE users SET username = ? WHERE id = ?").run(username, row.id);
-}
-db.exec(`
-  CREATE TABLE IF NOT EXISTS user_progress (
-    user_id INTEGER PRIMARY KEY,
-    points INTEGER NOT NULL DEFAULT 0,
-    owned_skins TEXT NOT NULL DEFAULT '["classic"]',
-    selected_skin TEXT NOT NULL DEFAULT 'classic',
-    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-  )
-`);
-db.exec(`
-  CREATE TABLE IF NOT EXISTS email_verifications (
-    email TEXT PRIMARY KEY,
-    user_id INTEGER NOT NULL,
-    code_hash TEXT NOT NULL,
-    expires_at INTEGER NOT NULL,
-    last_sent_at INTEGER NOT NULL,
-    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-  )
-`);
-db.exec(`
-  CREATE TABLE IF NOT EXISTS custom_skins (
-    id TEXT PRIMARY KEY,
-    creator_user_id INTEGER NOT NULL,
-    name TEXT NOT NULL,
-    palette_json TEXT NOT NULL,
-    list_price INTEGER NOT NULL DEFAULT 0,
-    is_listed INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(creator_user_id) REFERENCES users(id) ON DELETE CASCADE
-  )
-`);
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+});
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
@@ -212,6 +147,77 @@ app.use(
 );
 
 app.use(express.static(path.join(__dirname, "public")));
+
+async function dbQuery(text, params = []) {
+  return pool.query(text, params);
+}
+
+async function dbGet(text, params = []) {
+  const result = await dbQuery(text, params);
+  return result.rows[0] || null;
+}
+
+async function dbAll(text, params = []) {
+  const result = await dbQuery(text, params);
+  return result.rows;
+}
+
+async function initDatabase() {
+  await dbQuery(`
+    CREATE TABLE IF NOT EXISTS users (
+      id BIGSERIAL PRIMARY KEY,
+      username TEXT,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      email_verified BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await dbQuery(`
+    CREATE TABLE IF NOT EXISTS user_progress (
+      user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      points INTEGER NOT NULL DEFAULT 0,
+      owned_skins TEXT NOT NULL DEFAULT '["classic"]',
+      selected_skin TEXT NOT NULL DEFAULT 'classic',
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await dbQuery(`
+    CREATE TABLE IF NOT EXISTS email_verifications (
+      email TEXT PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      code_hash TEXT NOT NULL,
+      expires_at BIGINT NOT NULL,
+      last_sent_at BIGINT NOT NULL
+    )
+  `);
+
+  await dbQuery(`
+    CREATE TABLE IF NOT EXISTS custom_skins (
+      id TEXT PRIMARY KEY,
+      creator_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      palette_json TEXT NOT NULL,
+      list_price INTEGER NOT NULL DEFAULT 0,
+      is_listed BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  const usersWithoutUsername = await dbAll(
+    "SELECT id, email FROM users WHERE username IS NULL OR BTRIM(username) = ''"
+  );
+  for (const row of usersWithoutUsername) {
+    const base = String(row.email || "")
+      .split("@")[0]
+      .replace(/[^a-zA-Z0-9_-]/g, "")
+      .slice(0, 20);
+    const username = base ? `${base}-${row.id}` : `player-${row.id}`;
+    await dbQuery("UPDATE users SET username = $1 WHERE id = $2", [username, row.id]);
+  }
+}
 
 function isAuthed(req) {
   return Boolean(req.session && req.session.userId);
@@ -278,17 +284,19 @@ async function issueVerificationCode(userId, email) {
   const now = Date.now();
   const expiresAt = now + VERIFICATION_TTL_MS;
 
-  db.prepare(
+  await dbQuery(
     `
     INSERT INTO email_verifications (email, user_id, code_hash, expires_at, last_sent_at)
-    VALUES (?, ?, ?, ?, ?)
+    VALUES ($1, $2, $3, $4, $5)
     ON CONFLICT(email) DO UPDATE SET
-      user_id = excluded.user_id,
-      code_hash = excluded.code_hash,
-      expires_at = excluded.expires_at,
-      last_sent_at = excluded.last_sent_at
+      user_id = EXCLUDED.user_id,
+      code_hash = EXCLUDED.code_hash,
+      expires_at = EXCLUDED.expires_at,
+      last_sent_at = EXCLUDED.last_sent_at
     `
-  ).run(email, userId, hashCode(code), expiresAt, now);
+    ,
+    [email, userId, hashCode(code), expiresAt, now]
+  );
 
   await sendVerificationEmail(email, code);
 }
@@ -311,10 +319,9 @@ function requireAuth(req, res, next) {
   next();
 }
 
-function normalizeSkins(rawOwnedSkins) {
-  const customIds = new Set(
-    db.prepare("SELECT id FROM custom_skins").all().map((row) => String(row.id))
-  );
+async function normalizeSkins(rawOwnedSkins) {
+  const customRows = await dbAll("SELECT id FROM custom_skins");
+  const customIds = new Set(customRows.map((row) => String(row.id)));
   try {
     const parsed = JSON.parse(rawOwnedSkins);
     if (!Array.isArray(parsed)) return ["classic"];
@@ -346,10 +353,9 @@ function parseCustomPalette(rawPalette) {
   return normalized;
 }
 
-function getCustomSkinById(skinId) {
-  return db
-    .prepare(
-      `
+async function getCustomSkinById(skinId) {
+  return dbGet(
+    `
       SELECT
         cs.id,
         cs.creator_user_id,
@@ -360,16 +366,16 @@ function getCustomSkinById(skinId) {
         u.username AS creator_username
       FROM custom_skins cs
       LEFT JOIN users u ON u.id = cs.creator_user_id
-      WHERE cs.id = ?
+      WHERE cs.id = $1
       `
-    )
-    .get(skinId);
+    ,
+    [skinId]
+  );
 }
 
-function listVisibleCustomSkins(userId) {
-  return db
-    .prepare(
-      `
+async function listVisibleCustomSkins(userId) {
+  return dbAll(
+    `
       SELECT
         cs.id,
         cs.creator_user_id,
@@ -380,28 +386,28 @@ function listVisibleCustomSkins(userId) {
         u.username AS creator_username
       FROM custom_skins cs
       LEFT JOIN users u ON u.id = cs.creator_user_id
-      WHERE cs.is_listed = 1 OR cs.creator_user_id = ?
+      WHERE cs.is_listed = TRUE OR cs.creator_user_id = $1
       ORDER BY cs.created_at DESC
       `
-    )
-    .all(userId);
+    ,
+    [userId]
+  );
 }
 
-function skinExists(skinId) {
+async function skinExists(skinId) {
   if (SKIN_CATALOG[skinId]) return true;
-  const custom = db.prepare("SELECT id FROM custom_skins WHERE id = ?").get(skinId);
+  const custom = await dbGet("SELECT id FROM custom_skins WHERE id = $1", [skinId]);
   return Boolean(custom);
 }
 
-function ensureProgress(userId) {
-  const row = db
-    .prepare(
-      "SELECT user_id, points, owned_skins, selected_skin FROM user_progress WHERE user_id = ?"
-    )
-    .get(userId);
+async function ensureProgress(userId) {
+  const row = await dbGet(
+    "SELECT user_id, points, owned_skins, selected_skin FROM user_progress WHERE user_id = $1",
+    [userId]
+  );
 
   if (row) {
-    const ownedSkins = normalizeSkins(row.owned_skins);
+    const ownedSkins = await normalizeSkins(row.owned_skins);
     let selectedSkin = row.selected_skin;
     if (!ownedSkins.includes(selectedSkin)) {
       selectedSkin = "classic";
@@ -410,9 +416,10 @@ function ensureProgress(userId) {
       JSON.stringify(ownedSkins) !== row.owned_skins ||
       selectedSkin !== row.selected_skin
     ) {
-      db.prepare(
-        "UPDATE user_progress SET owned_skins = ?, selected_skin = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?"
-      ).run(JSON.stringify(ownedSkins), selectedSkin, userId);
+      await dbQuery(
+        "UPDATE user_progress SET owned_skins = $1, selected_skin = $2, updated_at = NOW() WHERE user_id = $3",
+        [JSON.stringify(ownedSkins), selectedSkin, userId]
+      );
     }
 
     return {
@@ -423,9 +430,10 @@ function ensureProgress(userId) {
     };
   }
 
-  db.prepare(
-    "INSERT INTO user_progress (user_id, points, owned_skins, selected_skin) VALUES (?, 0, ?, ?)"
-  ).run(userId, JSON.stringify(["classic"]), "classic");
+  await dbQuery(
+    "INSERT INTO user_progress (user_id, points, owned_skins, selected_skin) VALUES ($1, 0, $2, $3) ON CONFLICT (user_id) DO NOTHING",
+    [userId, JSON.stringify(["classic"]), "classic"]
+  );
 
   return {
     userId,
@@ -491,8 +499,8 @@ app.get("/inventory", requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "public", "inventory.html"));
 });
 
-app.get("/creator", requireAuth, (req, res) => {
-  const progress = ensureProgress(req.session.userId);
+app.get("/creator", requireAuth, async (req, res) => {
+  const progress = await ensureProgress(req.session.userId);
   if (progress.points < CREATOR_UNLOCK_POINTS) {
     return res.redirect("/dashboard");
   }
@@ -534,14 +542,15 @@ app.get("/dodger", requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "public", "dodger.html"));
 });
 
-app.get("/api/me", (req, res) => {
+app.get("/api/me", async (req, res) => {
   if (!isAuthed(req)) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  const user = db
-    .prepare("SELECT id, username, email, email_verified, created_at FROM users WHERE id = ?")
-    .get(req.session.userId);
+  const user = await dbGet(
+    "SELECT id, username, email, email_verified, created_at FROM users WHERE id = $1",
+    [req.session.userId]
+  );
 
   if (!user) {
     req.session.destroy(() => {});
@@ -562,54 +571,52 @@ app.get("/api/me", (req, res) => {
   });
 });
 
-app.get("/api/leaderboard", (req, res) => {
+app.get("/api/leaderboard", async (req, res) => {
   if (!isAuthed(req)) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  const me = db
-    .prepare(
-      `
+  const me = await dbGet(
+    `
       SELECT u.id, u.username, up.points
       FROM users u
       JOIN user_progress up ON up.user_id = u.id
-      WHERE u.id = ? AND u.email_verified = 1
+      WHERE u.id = $1 AND u.email_verified = TRUE
       `
-    )
-    .get(req.session.userId);
+    ,
+    [req.session.userId]
+  );
 
   if (!me) {
     return res.status(404).json({ error: "Current user not found in leaderboard." });
   }
 
-  const rankRow = db
-    .prepare(
-      `
+  const rankRow = await dbGet(
+    `
       SELECT COUNT(*) + 1 AS rank
       FROM users u
       JOIN user_progress up ON up.user_id = u.id
       WHERE
-        u.email_verified = 1
-        AND (up.points > ? OR (up.points = ? AND u.id < ?))
+        u.email_verified = TRUE
+        AND (up.points > $1 OR (up.points = $2 AND u.id < $3))
       `
-    )
-    .get(me.points, me.points, me.id);
+    ,
+    [me.points, me.points, me.id]
+  );
 
-  const rows = db
-    .prepare(
-      `
+  const rows = await dbAll(
+    `
       SELECT
         u.id,
         u.username,
         up.points
       FROM users u
       JOIN user_progress up ON up.user_id = u.id
-      WHERE u.email_verified = 1
+      WHERE u.email_verified = TRUE
       ORDER BY up.points DESC, u.id ASC
       LIMIT 20
       `
-    )
-    .all();
+  );
 
   const top = rows.map((row, idx) => {
     return {
@@ -630,19 +637,19 @@ app.get("/api/leaderboard", (req, res) => {
   });
 });
 
-app.get("/api/progress", (req, res) => {
+app.get("/api/progress", async (req, res) => {
   if (!isAuthed(req)) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  const progress = ensureProgress(req.session.userId);
+  const progress = await ensureProgress(req.session.userId);
   const baseCatalog = Object.entries(SKIN_CATALOG).map(([id, data]) => ({
     id,
     name: skinNameFromId(id),
     cost: data.cost,
     isCustom: false,
   }));
-  const customCatalog = listVisibleCustomSkins(req.session.userId)
+  const customCatalog = (await listVisibleCustomSkins(req.session.userId))
     .map((row) => {
       try {
         const palette = JSON.parse(row.palette_json);
@@ -669,7 +676,7 @@ app.get("/api/progress", (req, res) => {
   });
 });
 
-app.post("/api/progress/add", (req, res) => {
+app.post("/api/progress/add", async (req, res) => {
   if (!isAuthed(req)) {
     return res.status(401).json({ error: "Unauthorized" });
   }
@@ -679,29 +686,30 @@ app.post("/api/progress/add", (req, res) => {
     return res.status(400).json({ error: "Invalid points value." });
   }
 
-  const progress = ensureProgress(req.session.userId);
+  const progress = await ensureProgress(req.session.userId);
   const nextPoints = progress.points + points;
 
-  db.prepare(
-    "UPDATE user_progress SET points = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?"
-  ).run(nextPoints, req.session.userId);
+  await dbQuery("UPDATE user_progress SET points = $1, updated_at = NOW() WHERE user_id = $2", [
+    nextPoints,
+    req.session.userId,
+  ]);
 
   return res.json({ ok: true, points: nextPoints });
 });
 
-app.post("/api/progress/buy", (req, res) => {
+app.post("/api/progress/buy", async (req, res) => {
   if (!isAuthed(req)) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
   const skinId = String(req.body.skinId || "");
   const baseSkin = SKIN_CATALOG[skinId];
-  const customSkin = baseSkin ? null : getCustomSkinById(skinId);
+  const customSkin = baseSkin ? null : await getCustomSkinById(skinId);
   if (!baseSkin && !customSkin) {
     return res.status(400).json({ error: "Unknown skin." });
   }
 
-  const progress = ensureProgress(req.session.userId);
+  const progress = await ensureProgress(req.session.userId);
   if (progress.ownedSkins.includes(skinId)) {
     return res.status(409).json({ error: "Skin already owned." });
   }
@@ -729,14 +737,16 @@ app.post("/api/progress/buy", (req, res) => {
   const nextPoints = progress.points - cost;
   const nextOwnedSkins = [...progress.ownedSkins, skinId];
 
-  db.prepare(
-    "UPDATE user_progress SET points = ?, owned_skins = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?"
-  ).run(nextPoints, JSON.stringify(nextOwnedSkins), req.session.userId);
+  await dbQuery(
+    "UPDATE user_progress SET points = $1, owned_skins = $2, updated_at = NOW() WHERE user_id = $3",
+    [nextPoints, JSON.stringify(nextOwnedSkins), req.session.userId]
+  );
   if (customSkin) {
-    const sellerProgress = ensureProgress(customSkin.creator_user_id);
-    db.prepare(
-      "UPDATE user_progress SET points = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?"
-    ).run(sellerProgress.points + cost, customSkin.creator_user_id);
+    const sellerProgress = await ensureProgress(customSkin.creator_user_id);
+    await dbQuery("UPDATE user_progress SET points = $1, updated_at = NOW() WHERE user_id = $2", [
+      sellerProgress.points + cost,
+      customSkin.creator_user_id,
+    ]);
   }
 
   return res.json({
@@ -747,24 +757,25 @@ app.post("/api/progress/buy", (req, res) => {
   });
 });
 
-app.post("/api/progress/select", (req, res) => {
+app.post("/api/progress/select", async (req, res) => {
   if (!isAuthed(req)) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
   const skinId = String(req.body.skinId || "");
-  if (!skinExists(skinId)) {
+  if (!(await skinExists(skinId))) {
     return res.status(400).json({ error: "Unknown skin." });
   }
 
-  const progress = ensureProgress(req.session.userId);
+  const progress = await ensureProgress(req.session.userId);
   if (!progress.ownedSkins.includes(skinId)) {
     return res.status(400).json({ error: "Skin is not owned." });
   }
 
-  db.prepare(
-    "UPDATE user_progress SET selected_skin = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?"
-  ).run(skinId, req.session.userId);
+  await dbQuery(
+    "UPDATE user_progress SET selected_skin = $1, updated_at = NOW() WHERE user_id = $2",
+    [skinId, req.session.userId]
+  );
 
   return res.json({
     ok: true,
@@ -774,7 +785,7 @@ app.post("/api/progress/select", (req, res) => {
   });
 });
 
-app.post("/api/progress/sell", (req, res) => {
+app.post("/api/progress/sell", async (req, res) => {
   if (!isAuthed(req)) {
     return res.status(401).json({ error: "Unauthorized" });
   }
@@ -784,13 +795,13 @@ app.post("/api/progress/sell", (req, res) => {
     return res.status(400).json({ error: "Classic skin cannot be removed." });
   }
 
-  const progress = ensureProgress(req.session.userId);
+  const progress = await ensureProgress(req.session.userId);
   if (!progress.ownedSkins.includes(skinId)) {
     return res.status(400).json({ error: "Skin is not in your inventory." });
   }
 
   const baseSkin = SKIN_CATALOG[skinId];
-  const customSkin = baseSkin ? null : getCustomSkinById(skinId);
+  const customSkin = baseSkin ? null : await getCustomSkinById(skinId);
   if (!baseSkin && !customSkin) {
     return res.status(400).json({ error: "Unknown skin." });
   }
@@ -802,13 +813,15 @@ app.post("/api/progress/sell", (req, res) => {
   const nextSelectedSkin = progress.selectedSkin === skinId ? "classic" : progress.selectedSkin;
   const nextPoints = progress.points + refund;
 
-  db.prepare(
+  await dbQuery(
     `
     UPDATE user_progress
-    SET points = ?, owned_skins = ?, selected_skin = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE user_id = ?
+    SET points = $1, owned_skins = $2, selected_skin = $3, updated_at = NOW()
+    WHERE user_id = $4
     `
-  ).run(nextPoints, JSON.stringify(nextOwnedSkins), nextSelectedSkin, req.session.userId);
+    ,
+    [nextPoints, JSON.stringify(nextOwnedSkins), nextSelectedSkin, req.session.userId]
+  );
 
   return res.json({
     ok: true,
@@ -819,7 +832,7 @@ app.post("/api/progress/sell", (req, res) => {
   });
 });
 
-app.post("/api/skins/create", (req, res) => {
+app.post("/api/skins/create", async (req, res) => {
   if (!isAuthed(req)) {
     return res.status(401).json({ error: "Unauthorized" });
   }
@@ -838,7 +851,7 @@ app.post("/api/skins/create", (req, res) => {
     return res.status(400).json({ error: "Invalid palette colors." });
   }
 
-  const progress = ensureProgress(req.session.userId);
+  const progress = await ensureProgress(req.session.userId);
   if (progress.points < CREATOR_UNLOCK_POINTS) {
     return res
       .status(400)
@@ -846,26 +859,22 @@ app.post("/api/skins/create", (req, res) => {
   }
 
   const skinId = `${CUSTOM_SKIN_ID_PREFIX}${crypto.randomBytes(4).toString("hex")}`;
-  db.prepare(
+  await dbQuery(
     `
     INSERT INTO custom_skins (id, creator_user_id, name, palette_json, list_price, is_listed)
-    VALUES (?, ?, ?, ?, ?, ?)
+    VALUES ($1, $2, $3, $4, $5, $6)
     `
-  ).run(
-    skinId,
-    req.session.userId,
-    name,
-    JSON.stringify(palette),
-    listPrice,
-    listPrice > 0 ? 1 : 0
+    ,
+    [skinId, req.session.userId, name, JSON.stringify(palette), listPrice, listPrice > 0]
   );
 
   const nextOwned = progress.ownedSkins.includes(skinId)
     ? progress.ownedSkins
     : [...progress.ownedSkins, skinId];
-  db.prepare(
-    "UPDATE user_progress SET owned_skins = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?"
-  ).run(JSON.stringify(nextOwned), req.session.userId);
+  await dbQuery("UPDATE user_progress SET owned_skins = $1, updated_at = NOW() WHERE user_id = $2", [
+    JSON.stringify(nextOwned),
+    req.session.userId,
+  ]);
 
   return res.json({ ok: true, skinId, points: progress.points });
 });
@@ -887,27 +896,27 @@ app.post("/api/register", async (req, res) => {
       .status(400)
       .json({ error: "Password must be at least 8 characters long." });
   }
-  const exists = db.prepare("SELECT id FROM users WHERE email = ?").get(email);
+  const exists = await dbGet("SELECT id FROM users WHERE email = $1", [email]);
   if (exists) {
     return res.status(409).json({ error: "Account with this email already exists." });
   }
-  const usernameExists = db
-    .prepare("SELECT id FROM users WHERE lower(username) = lower(?)")
-    .get(username);
+  const usernameExists = await dbGet("SELECT id FROM users WHERE lower(username) = lower($1)", [
+    username,
+  ]);
   if (usernameExists) {
     return res.status(409).json({ error: "Username is already taken." });
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
-  const result = db
-    .prepare("INSERT INTO users (username, email, password_hash, email_verified) VALUES (?, ?, ?, 0)")
-    .run(username, email, passwordHash);
-
-  const userId = Number(result.lastInsertRowid);
-  ensureProgress(userId);
+  const created = await dbGet(
+    "INSERT INTO users (username, email, password_hash, email_verified) VALUES ($1, $2, $3, FALSE) RETURNING id",
+    [username, email, passwordHash]
+  );
+  const userId = Number(created.id);
+  await ensureProgress(userId);
   const mailConfig = getMailConfig();
   if (!mailConfig) {
-    db.prepare("UPDATE users SET email_verified = 1 WHERE id = ?").run(userId);
+    await dbQuery("UPDATE users SET email_verified = TRUE WHERE id = $1", [userId]);
     req.session.userId = userId;
     req.session.pendingEmail = null;
     req.session.cookie.maxAge = remember
@@ -919,8 +928,8 @@ app.post("/api/register", async (req, res) => {
   try {
     await issueVerificationCode(userId, email);
   } catch (error) {
-    db.prepare("DELETE FROM user_progress WHERE user_id = ?").run(userId);
-    db.prepare("DELETE FROM users WHERE id = ?").run(userId);
+    await dbQuery("DELETE FROM user_progress WHERE user_id = $1", [userId]);
+    await dbQuery("DELETE FROM users WHERE id = $1", [userId]);
     return res.status(500).json({ error: error.message || "Failed to send verification email." });
   }
 
@@ -941,9 +950,9 @@ app.post("/api/login", async (req, res) => {
     return res.status(400).json({ error: "Invalid email or password." });
   }
 
-  const user = db
-    .prepare("SELECT id, password_hash, email_verified FROM users WHERE email = ?")
-    .get(email);
+  const user = await dbGet("SELECT id, password_hash, email_verified FROM users WHERE email = $1", [
+    email,
+  ]);
 
   if (!user) {
     return res.status(401).json({ error: "Invalid email or password." });
@@ -959,7 +968,7 @@ app.post("/api/login", async (req, res) => {
 
   req.session.userId = user.id;
   req.session.pendingEmail = null;
-  ensureProgress(req.session.userId);
+  await ensureProgress(req.session.userId);
   req.session.cookie.maxAge = remember
     ? 1000 * 60 * 60 * 24 * 30
     : 1000 * 60 * 60 * 24;
@@ -973,7 +982,7 @@ app.post("/api/verify/resend", async (req, res) => {
     return res.status(400).json({ error: "Invalid email." });
   }
 
-  const user = db.prepare("SELECT id, email_verified FROM users WHERE email = ?").get(email);
+  const user = await dbGet("SELECT id, email_verified FROM users WHERE email = $1", [email]);
   if (!user) {
     return res.status(404).json({ error: "Account not found." });
   }
@@ -981,9 +990,10 @@ app.post("/api/verify/resend", async (req, res) => {
     return res.status(400).json({ error: "Email already verified." });
   }
 
-  const previous = db
-    .prepare("SELECT last_sent_at FROM email_verifications WHERE email = ?")
-    .get(email);
+  const previous = await dbGet(
+    "SELECT last_sent_at FROM email_verifications WHERE email = $1",
+    [email]
+  );
   if (previous && Date.now() - Number(previous.last_sent_at) < 45 * 1000) {
     return res.status(429).json({ error: "Please wait before requesting another code." });
   }
@@ -996,16 +1006,17 @@ app.post("/api/verify/resend", async (req, res) => {
   }
 });
 
-app.post("/api/verify/confirm", (req, res) => {
+app.post("/api/verify/confirm", async (req, res) => {
   const email = normalizeEmail(req.body.email);
   const code = String(req.body.code || "").trim();
   if (!isValidEmail(email) || !/^\d{6}$/.test(code)) {
     return res.status(400).json({ error: "Invalid email or code format." });
   }
 
-  const verification = db
-    .prepare("SELECT user_id, code_hash, expires_at FROM email_verifications WHERE email = ?")
-    .get(email);
+  const verification = await dbGet(
+    "SELECT user_id, code_hash, expires_at FROM email_verifications WHERE email = $1",
+    [email]
+  );
   if (!verification) {
     return res.status(400).json({ error: "Verification code not found. Request a new one." });
   }
@@ -1016,8 +1027,8 @@ app.post("/api/verify/confirm", (req, res) => {
     return res.status(400).json({ error: "Incorrect verification code." });
   }
 
-  db.prepare("UPDATE users SET email_verified = 1 WHERE id = ?").run(verification.user_id);
-  db.prepare("DELETE FROM email_verifications WHERE email = ?").run(email);
+  await dbQuery("UPDATE users SET email_verified = TRUE WHERE id = $1", [verification.user_id]);
+  await dbQuery("DELETE FROM email_verifications WHERE email = $1", [email]);
 
   req.session.userId = verification.user_id;
   req.session.pendingEmail = null;
@@ -1034,9 +1045,9 @@ app.post("/api/account/delete", async (req, res) => {
     return res.status(400).json({ error: "Password is required." });
   }
 
-  const user = db
-    .prepare("SELECT id, email, password_hash FROM users WHERE id = ?")
-    .get(req.session.userId);
+  const user = await dbGet("SELECT id, email, password_hash FROM users WHERE id = $1", [
+    req.session.userId,
+  ]);
   if (!user) {
     return res.status(404).json({ error: "User not found." });
   }
@@ -1046,9 +1057,9 @@ app.post("/api/account/delete", async (req, res) => {
     return res.status(401).json({ error: "Incorrect password." });
   }
 
-  db.prepare("DELETE FROM email_verifications WHERE email = ?").run(user.email);
-  db.prepare("DELETE FROM user_progress WHERE user_id = ?").run(user.id);
-  db.prepare("DELETE FROM users WHERE id = ?").run(user.id);
+  await dbQuery("DELETE FROM email_verifications WHERE email = $1", [user.email]);
+  await dbQuery("DELETE FROM user_progress WHERE user_id = $1", [user.id]);
+  await dbQuery("DELETE FROM users WHERE id = $1", [user.id]);
 
   req.session.destroy(() => {
     res.clearCookie("connect.sid");
@@ -1063,6 +1074,17 @@ app.post("/api/logout", (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+async function startServer() {
+  if (!process.env.DATABASE_URL) {
+    throw new Error("DATABASE_URL is required. Configure Supabase Postgres connection string.");
+  }
+  await initDatabase();
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+startServer().catch((error) => {
+  console.error("Failed to start server:", error.message);
+  process.exit(1);
 });
