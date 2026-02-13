@@ -18,6 +18,7 @@ const PONG_ROOM_TTL_MS = 1000 * 60 * 30;
 const PONG_ROOM_IDLE_DROP_MS = 1000 * 60 * 10;
 const COOP_ROOM_TTL_MS = 1000 * 60 * 60 * 6;
 const COOP_ROOM_IDLE_DROP_MS = 1000 * 60 * 30;
+const ALLOWED_CHALLENGE_IDS = new Set(["game-001", "game-010"]);
 const DAILY_MISSIONS = [
   { id: "daily_points_120", label: "Earn 120 points today", type: "day_points", target: 120 },
   { id: "daily_points_260", label: "Earn 260 points today", type: "day_points", target: 260 },
@@ -948,13 +949,7 @@ app.get("/challenge/:id", requireAuth, (req, res) => {
 
 app.get("/game/:id", requireAuth, (req, res) => {
   const id = String(req.params.id || "");
-  const match = /^game-(\d{3,4})$/.exec(id);
-  if (!match) {
-    return res.redirect("/games");
-  }
-
-  const num = Number(match[1]);
-  if (!Number.isInteger(num) || num < 1 || num > MAX_CHALLENGE_GAMES) {
+  if (!ALLOWED_CHALLENGE_IDS.has(id)) {
     return res.redirect("/games");
   }
 
