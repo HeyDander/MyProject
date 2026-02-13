@@ -2109,6 +2109,67 @@ app.post("/api/skins/unlist", async (req, res) => {
   return res.json({ ok: true, skinId, isListed: false });
 });
 
+app.post("/api/skins/delete", async (req, res) => {
+  if (!isAuthed(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const skinId = String(req.body.skinId || "").trim();
+  if (!skinId) {
+    return res.status(400).json({ error: "Invalid custom skin id." });
+  }
+
+  const customSkin = await dbGet(
+    `
+    SELECT id, creator_user_id
+    FROM custom_skins
+    WHERE id = $1
+    `,
+    [skinId]
+  );
+  if (!customSkin) {
+    return res.status(404).json({ error: "Custom skin not found." });
+  }
+  if (Number(customSkin.creator_user_id) !== Number(req.session.userId)) {
+    return res.status(403).json({ error: "You can only delete your own custom skins." });
+  }
+
+  await dbQuery("DELETE FROM custom_skins WHERE id = $1", [skinId]);
+
+  const candidates = await dbAll(
+    "SELECT user_id, owned_skins, selected_skin FROM user_progress WHERE owned_skins LIKE $1 OR selected_skin = $2",
+    [`%${skinId}%`, skinId]
+  );
+
+  for (const row of candidates) {
+    let owned = ["classic"];
+    try {
+      const parsed = JSON.parse(row.owned_skins || "[]");
+      owned = Array.isArray(parsed) ? parsed : ["classic"];
+    } catch (_error) {
+      owned = ["classic"];
+    }
+    const filtered = owned.filter((id) => id !== skinId);
+    const nextOwned = filtered.includes("classic") ? filtered : ["classic", ...filtered];
+    const nextSelected = row.selected_skin === skinId ? "classic" : row.selected_skin;
+    await dbQuery(
+      "UPDATE user_progress SET owned_skins = $1, selected_skin = $2, updated_at = NOW() WHERE user_id = $3",
+      [JSON.stringify(nextOwned), nextSelected, row.user_id]
+    );
+  }
+
+  const meProgress = await ensureProgress(req.session.userId);
+
+  return res.json({
+    ok: true,
+    skinId,
+    affectedPlayers: candidates.length,
+    points: meProgress.points,
+    ownedSkins: meProgress.ownedSkins,
+    selectedSkin: meProgress.selectedSkin,
+  });
+});
+
 app.post("/api/register", async (req, res) => {
   const username = normalizeUsername(req.body.username);
   const email = normalizeEmail(req.body.email);

@@ -355,11 +355,20 @@ async function onSkinDelete(skinId) {
   const ok = window.confirm(TT("Delete this custom skin from game for everyone?", "Удалить этот пользовательский скин из игры для всех?"));
   if (!ok) return;
   try {
-    await window.requestJson("/api/skins/delete", {
+    const result = await window.requestJson("/api/skins/delete", {
       method: "POST",
       body: JSON.stringify({ skinId }),
     });
-    await refreshProgress();
+    if (result && Array.isArray(result.ownedSkins)) {
+      skinState.points = Number(result.points || 0);
+      skinState.ownedSkins = result.ownedSkins;
+      skinState.selectedSkin = result.selectedSkin || "classic";
+      skinState.catalog = skinState.catalog.filter((skin) => skin.id !== skinId);
+      SKIN_MAP.delete(skinId);
+      updateProgressUI();
+    } else {
+      await refreshProgress();
+    }
     setShopMessage(TT("Custom skin deleted.", "Пользовательский скин удален."), false);
   } catch (error) {
     setShopMessage(error.message || TT("Failed to delete custom skin.", "Не удалось удалить пользовательский скин."), true);
