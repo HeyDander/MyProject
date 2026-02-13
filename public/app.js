@@ -103,6 +103,10 @@ function initRussianLocale() {
     ["Upload Game From PC", "Загрузка игры с ПК"],
     ["Open PC Guide", "Открыть гайд по ПК"],
     ["Open Upload Page", "Открыть страницу загрузки"],
+    ["Arcade Games", "Аркадные игры"],
+    ["Arcade", "Аркада"],
+    ["40 Separate Games", "40 отдельных игр"],
+    ["Pick any game from the list and play.", "Выберите любую игру из списка и играйте."],
     ["Welcome back", "С возвращением"],
     ["Sign in to your account", "Войдите в свой аккаунт"],
     ["Secure Access", "Безопасный доступ"],
@@ -203,6 +207,7 @@ function initRussianLocale() {
     ["PC Upload Guide", "Гайд по загрузке с ПК"],
     ["Uploaded Game", "Загруженная игра"],
     ["Pong Online", "Pong Онлайн"],
+    ["Arcade Games", "Аркадные игры"],
     ["Login", "Вход"],
     ["Create Account", "Создать аккаунт"],
   ]);
