@@ -135,6 +135,22 @@ function initRussianLocale() {
     ["Password", "Пароль"],
     ["Remember me", "Запомнить меня"],
     ["Forgot password?", "Забыли пароль?"],
+    ["Forgot Password", "Забыли пароль"],
+    ["Reset Password", "Сброс пароля"],
+    ["Recovery", "Восстановление"],
+    ["Enter your email and we will send a 6-digit reset code.", "Введите почту, и мы отправим 6-значный код сброса."],
+    ["Reset access", "Восстановление доступа"],
+    ["Request password reset code", "Запросить код сброса пароля"],
+    ["Send reset code", "Отправить код сброса"],
+    ["Remembered your password?", "Вспомнили пароль?"],
+    ["Reset password", "Сбросить пароль"],
+    ["Enter email, code, and new password to restore access.", "Введите почту, код и новый пароль для восстановления доступа."],
+    ["Set new password", "Установить новый пароль"],
+    ["Use 6-digit code from email", "Используйте 6-значный код из письма"],
+    ["New password", "Новый пароль"],
+    ["Update password", "Обновить пароль"],
+    ["Need another code?", "Нужен новый код?"],
+    ["Resend reset code", "Отправить код повторно"],
     ["Sign in", "Войти"],
     ["No account yet?", "Еще нет аккаунта?"],
     ["Create account", "Создать аккаунт"],
@@ -210,6 +226,8 @@ function initRussianLocale() {
     ["Arcade Games", "Аркадные игры"],
     ["Login", "Вход"],
     ["Create Account", "Создать аккаунт"],
+    ["Forgot Password", "Забыли пароль"],
+    ["Reset Password", "Сброс пароля"],
   ]);
   if (titleMap.has(document.title)) {
     document.title = titleMap.get(document.title);
@@ -258,6 +276,11 @@ function initAuthForm() {
 
   const endpoint = form.getAttribute("data-endpoint");
   const messageEl = form.querySelector("[data-message]");
+  const emailInput = form.querySelector('input[name="email"]');
+  if (emailInput && !emailInput.value) {
+    const fromQuery = new URLSearchParams(window.location.search).get("email");
+    if (fromQuery) emailInput.value = fromQuery;
+  }
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -738,192 +761,6 @@ function initUploadGameForm() {
   });
 }
 
-function initCoopPlay() {
-  const COOP_KEY = "coop-room-code";
-  const path = window.location.pathname;
-  const isGamePath =
-    path === "/snake" ||
-    path === "/shooter" ||
-    path === "/2042" ||
-    path === "/pong" ||
-    path === "/pong-online" ||
-    path === "/breakout" ||
-    path === "/dodger" ||
-    path.startsWith("/uploaded/") ||
-    path.startsWith("/game/");
-
-  const createForm = document.querySelector("[data-coop-create-form]");
-  const joinForm = document.querySelector("[data-coop-join-form]");
-  const stateBox = document.querySelector("[data-coop-state]");
-  const message = document.querySelector("[data-coop-message]");
-  const leaveBtn = document.querySelector("[data-coop-leave]");
-
-  let code = localStorage.getItem(COOP_KEY) || "";
-  let pollTimer = 0;
-  let sending = false;
-  let overlay = null;
-
-  if (isGamePath) {
-    overlay = document.createElement("div");
-    overlay.className = "hub-extra-card";
-    overlay.style.position = "fixed";
-    overlay.style.left = "12px";
-    overlay.style.bottom = "12px";
-    overlay.style.zIndex = "80";
-    overlay.style.maxWidth = "260px";
-    overlay.style.padding = "10px 12px";
-    overlay.style.fontSize = "0.85rem";
-    overlay.innerHTML = `<p class="hub-muted">${T("No active co-op room.", "Нет активной кооп-комнаты.")}</p>`;
-    document.body.appendChild(overlay);
-  }
-
-  const renderState = (room) => {
-    if (!room) {
-      if (stateBox) stateBox.innerHTML = `<p class="hub-muted">${T("No active co-op room.", "Нет активной кооп-комнаты.")}</p>`;
-      if (overlay) overlay.innerHTML = `<p class="hub-muted">${T("No active co-op room.", "Нет активной кооп-комнаты.")}</p>`;
-      return;
-    }
-    if (!stateBox && !overlay) return;
-    stateBox.innerHTML = [
-      `<p class="hub-row"><span>${T("Code", "Код")}</span><strong>${room.code}</strong></p>`,
-      `<p class="hub-row"><span>${T("Status", "Статус")}</span><strong>${room.status}</strong></p>`,
-      `<p class="hub-row"><span>${room.players.host}</span><strong>${room.points.host}</strong></p>`,
-      `<p class="hub-row"><span>${room.players.friend}</span><strong>${room.points.friend}</strong></p>`,
-      `<p class="hub-row"><span>${T("Total", "Итого")}</span><strong>${room.points.total}</strong></p>`,
-    ].join("");
-
-    if (overlay) {
-      overlay.innerHTML = [
-        `<p class="hub-row"><span>${T("Co-op", "Кооп")} ${room.code}</span><strong>${room.status}</strong></p>`,
-        `<p class="hub-row"><span>${room.players.host}</span><strong>${room.points.host}</strong></p>`,
-        `<p class="hub-row"><span>${room.players.friend}</span><strong>${room.points.friend}</strong></p>`,
-        `<p class="hub-row"><span>${T("Total", "Итого")}</span><strong>${room.points.total}</strong></p>`,
-      ].join("");
-    }
-  };
-
-  const poll = async () => {
-    if (!code) {
-      renderState(null);
-      if (overlay) overlay.innerHTML = `<p class="hub-muted">${T("No active co-op room.", "Нет активной кооп-комнаты.")}</p>`;
-      return;
-    }
-    try {
-      const room = await requestJson(`/api/coop/state/${encodeURIComponent(code)}`, {
-        method: "GET",
-      });
-      renderState(room);
-    } catch (_error) {
-      code = "";
-      localStorage.removeItem(COOP_KEY);
-      renderState(null);
-      if (overlay) overlay.innerHTML = `<p class="hub-muted">${T("Co-op room expired.", "Кооп-комната истекла.")}</p>`;
-    }
-  };
-
-  const startPoll = () => {
-    if (pollTimer) return;
-    pollTimer = window.setInterval(poll, 1500);
-  };
-
-  if (createForm) {
-    createForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      setMessage(message, "", false);
-      const formData = new FormData(createForm);
-      const friendUsername = String(formData.get("friendUsername") || "").trim();
-      try {
-        const created = await requestJson("/api/coop/create", {
-          method: "POST",
-          body: JSON.stringify({ friendUsername }),
-        });
-        code = created.code;
-        localStorage.setItem(COOP_KEY, code);
-        setMessage(message, `${T("Co-op room created", "Кооп-комната создана")}: ${code}`, false);
-        await poll();
-      } catch (error) {
-        setMessage(message, error.message || T("Failed to create co-op room.", "Не удалось создать кооп-комнату."), true);
-      }
-    });
-  }
-
-  if (joinForm) {
-    joinForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      setMessage(message, "", false);
-      const formData = new FormData(joinForm);
-      const joinCode = String(formData.get("code") || "").trim().toUpperCase();
-      if (!joinCode) return;
-      try {
-        await requestJson("/api/coop/join", {
-          method: "POST",
-          body: JSON.stringify({ code: joinCode }),
-        });
-        code = joinCode;
-        localStorage.setItem(COOP_KEY, code);
-        setMessage(message, `${T("Joined room", "Вы вошли в комнату")}: ${code}`, false);
-        await poll();
-      } catch (error) {
-        setMessage(message, error.message || T("Failed to join room.", "Не удалось войти в комнату."), true);
-      }
-    });
-  }
-
-  window.CoopPlay = {
-    async addPoints(points, game) {
-      if (!isGamePath || !code || sending) return;
-      const amount = Number(points);
-      if (!Number.isInteger(amount) || amount <= 0) return;
-      sending = true;
-      try {
-        await requestJson("/api/coop/add-points", {
-          method: "POST",
-          body: JSON.stringify({
-            code,
-            points: amount,
-            game: String(game || window.location.pathname).slice(0, 64),
-          }),
-        });
-      } catch (_error) {
-        // Ignore coop sync errors to not interrupt game.
-      } finally {
-        sending = false;
-      }
-    },
-    getCode() {
-      return code;
-    },
-    async leave() {
-      if (!code) return;
-      try {
-        await requestJson("/api/coop/leave", {
-          method: "POST",
-          body: JSON.stringify({ code }),
-        });
-      } catch (_error) {
-        // ignore
-      }
-      code = "";
-      localStorage.removeItem(COOP_KEY);
-      renderState(null);
-    },
-  };
-
-  if (leaveBtn) {
-    leaveBtn.addEventListener("click", async () => {
-      await window.CoopPlay.leave();
-      setMessage(message, T("Co-op room closed.", "Кооп-комната закрыта."), false);
-    });
-  }
-
-  if (code) {
-    poll();
-    startPoll();
-  } else if (stateBox) {
-    renderState(null);
-  }
-}
-
 function initLastGameResume() {
   const LAST_GAME_KEY = "last-game-path";
   const path = window.location.pathname;
@@ -967,6 +804,5 @@ document.addEventListener("DOMContentLoaded", () => {
   initMobileGamepad();
   initUploadedGames();
   initUploadGameForm();
-  initCoopPlay();
   initLastGameResume();
 });

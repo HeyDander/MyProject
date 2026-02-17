@@ -1,6 +1,7 @@
 const path = require("path");
 const express = require("express");
 const session = require("express-session");
+const PgSession = require("connect-pg-simple")(session);
 const bcrypt = require("bcryptjs");
 const { Pool } = require("pg");
 const crypto = require("crypto");
@@ -9,6 +10,7 @@ const nodemailer = require("nodemailer");
 const app = express();
 const PORT = process.env.PORT || 3000;
 const VERIFICATION_TTL_MS = 10 * 60 * 1000;
+const PASSWORD_RESET_TTL_MS = 10 * 60 * 1000;
 const MAX_CHALLENGE_GAMES = 10;
 const MAX_SKINS = 50;
 const CUSTOM_SKIN_ID_PREFIX = "custom-";
@@ -27,11 +29,11 @@ const DAILY_MISSIONS = [
   { id: "daily_streak_7", label: "Reach 7-day streak", type: "streak", target: 7 },
 ];
 const ACHIEVEMENTS = [
-  { id: "ach_first_100", title: "First 100", type: "points", target: 100 },
-  { id: "ach_grinder_1000", title: "Grinder", type: "points", target: 1000 },
-  { id: "ach_skin_collector", title: "Skin Collector", type: "skins_bought", target: 5 },
-  { id: "ach_streak_7", title: "7-day streak", type: "streak", target: 7 },
-  { id: "ach_season_500", title: "Season 500", type: "season_points", target: 500 },
+  { id: "ach_first_100", title: "Первые 100", type: "points", target: 100 },
+  { id: "ach_grinder_1000", title: "Гриндер", type: "points", target: 1000 },
+  { id: "ach_skin_collector", title: "Коллекционер скинов", type: "skins_bought", target: 5 },
+  { id: "ach_streak_7", title: "Серия 7 дней", type: "streak", target: 7 },
+  { id: "ach_season_500", title: "500 в сезоне", type: "season_points", target: 500 },
 ];
 const SKIN_CATALOG = {
   "classic": { cost: 0 },
@@ -152,15 +154,21 @@ const pool = new Pool({
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+app.set("trust proxy", 1);
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "dev-secret-change-me",
+    store: new PgSession({
+      pool,
+      tableName: "user_sessions",
+      createTableIfMissing: true,
+    }),
     resave: false,
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
       sameSite: "lax",
-      secure: false,
+      secure: process.env.NODE_ENV === "production",
       maxAge: 1000 * 60 * 60 * 24,
     },
   })
@@ -465,6 +473,16 @@ async function initDatabase() {
   `);
 
   await dbQuery(`
+    CREATE TABLE IF NOT EXISTS password_resets (
+      email TEXT PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      code_hash TEXT NOT NULL,
+      expires_at BIGINT NOT NULL,
+      last_sent_at BIGINT NOT NULL
+    )
+  `);
+
+  await dbQuery(`
     CREATE TABLE IF NOT EXISTS custom_skins (
       id TEXT PRIMARY KEY,
       creator_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -541,7 +559,7 @@ function normalizeUsername(username) {
   return String(username || "")
     .trim()
     .replace(/\s+/g, "_")
-    .replace(/[^a-zA-Z0-9_-]/g, "")
+    .replace(/[^\p{L}\p{N}_-]/gu, "")
     .slice(0, 24);
 }
 
@@ -598,6 +616,32 @@ async function sendVerificationEmail(email, code) {
   });
 }
 
+async function sendPasswordResetEmail(email, code) {
+  const cfg = getMailConfig();
+  if (!cfg) {
+    throw new Error(
+      "Email service is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, FROM_EMAIL."
+    );
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.port === 465,
+    auth: {
+      user: cfg.user,
+      pass: cfg.pass,
+    },
+  });
+
+  await transporter.sendMail({
+    from: cfg.from,
+    to: email,
+    subject: "Your password reset code",
+    text: `Your password reset code is: ${code}. It expires in 10 minutes.`,
+  });
+}
+
 async function issueVerificationCode(userId, email) {
   const code = generateVerificationCode();
   const now = Date.now();
@@ -618,6 +662,27 @@ async function issueVerificationCode(userId, email) {
   );
 
   await sendVerificationEmail(email, code);
+}
+
+async function issuePasswordResetCode(userId, email) {
+  const code = generateVerificationCode();
+  const now = Date.now();
+  const expiresAt = now + PASSWORD_RESET_TTL_MS;
+
+  await dbQuery(
+    `
+    INSERT INTO password_resets (email, user_id, code_hash, expires_at, last_sent_at)
+    VALUES ($1, $2, $3, $4, $5)
+    ON CONFLICT(email) DO UPDATE SET
+      user_id = EXCLUDED.user_id,
+      code_hash = EXCLUDED.code_hash,
+      expires_at = EXCLUDED.expires_at,
+      last_sent_at = EXCLUDED.last_sent_at
+    `,
+    [email, userId, hashCode(code), expiresAt, now]
+  );
+
+  await sendPasswordResetEmail(email, code);
 }
 
 function skinNameFromId(id) {
@@ -893,6 +958,20 @@ app.get("/verify", (req, res) => {
     return res.redirect("/dashboard");
   }
   res.sendFile(path.join(__dirname, "public", "verify.html"));
+});
+
+app.get("/forgot-password", (req, res) => {
+  if (isAuthed(req)) {
+    return res.redirect("/dashboard");
+  }
+  res.sendFile(path.join(__dirname, "public", "forgot-password.html"));
+});
+
+app.get("/reset-password", (req, res) => {
+  if (isAuthed(req)) {
+    return res.redirect("/dashboard");
+  }
+  res.sendFile(path.join(__dirname, "public", "reset-password.html"));
 });
 
 app.get("/dashboard", requireAuth, (req, res) => {
@@ -1383,189 +1462,23 @@ app.post("/api/friends/requests/:id/reject", async (req, res) => {
 });
 
 app.post("/api/coop/create", async (req, res) => {
-  if (!isAuthed(req)) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-
-  cleanupCoopRooms();
-  const friendUsername = normalizeUsername(req.body.friendUsername);
-
-  const me = await dbGet("SELECT id, username FROM users WHERE id = $1", [req.session.userId]);
-  if (!me) return res.status(404).json({ error: "User not found." });
-
-  let invitedFriendId = null;
-  let invitedFriendName = "";
-  if (friendUsername) {
-    const friend = await dbGet("SELECT id, username FROM users WHERE lower(username) = lower($1)", [
-      friendUsername,
-    ]);
-    if (!friend) {
-      return res.status(404).json({ error: "Friend not found." });
-    }
-    if (Number(friend.id) === Number(req.session.userId)) {
-      return res.status(400).json({ error: "You cannot create coop with yourself." });
-    }
-
-    const relation = await dbGet(
-      `
-      SELECT 1
-      FROM friend_links
-      WHERE (user_id = $1 AND friend_user_id = $2) OR (user_id = $2 AND friend_user_id = $1)
-      `,
-      [req.session.userId, friend.id]
-    );
-    if (!relation) {
-      return res.status(403).json({ error: "Add this player to friends first." });
-    }
-    invitedFriendId = Number(friend.id);
-    invitedFriendName = friend.username || `player-${friend.id}`;
-  }
-
-  let code = makeRoomCode();
-  while (coopRooms.has(code)) code = makeRoomCode();
-  coopRooms.set(code, {
-    code,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    status: "waiting",
-    hostUserId: Number(req.session.userId),
-    friendUserId: invitedFriendId,
-    hostName: me.username || `player-${me.id}`,
-    friendName: invitedFriendName,
-    hostPoints: 0,
-    friendPoints: 0,
-    hostLastGame: "",
-    friendLastGame: "",
-  });
-
-  return res.json({ ok: true, code, role: "host" });
+  return res.status(410).json({ error: "Co-op mode is disabled." });
 });
 
 app.post("/api/coop/join", async (req, res) => {
-  if (!isAuthed(req)) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-  cleanupCoopRooms();
-  const code = String(req.body.code || "").trim().toUpperCase();
-  if (!/^[A-Z0-9]{6}$/.test(code)) {
-    return res.status(400).json({ error: "Invalid room code." });
-  }
-  const room = coopRooms.get(code);
-  if (!room) return res.status(404).json({ error: "Room not found or expired." });
-
-  const role = coopRole(room, req.session.userId);
-  if (!role && room.friendUserId) {
-    return res.status(403).json({ error: "This room is private for invited friend." });
-  }
-
-  if (!role && !room.friendUserId) {
-    if (Number(room.hostUserId) === Number(req.session.userId)) {
-      return res.status(400).json({ error: "You already are host in this room." });
-    }
-    const relation = await dbGet(
-      `
-      SELECT 1
-      FROM friend_links
-      WHERE (user_id = $1 AND friend_user_id = $2) OR (user_id = $2 AND friend_user_id = $1)
-      `,
-      [room.hostUserId, req.session.userId]
-    );
-    if (!relation) {
-      return res.status(403).json({ error: "Only friends of host can join this room." });
-    }
-    const me = await dbGet("SELECT id, username FROM users WHERE id = $1", [req.session.userId]);
-    room.friendUserId = Number(req.session.userId);
-    room.friendName = me?.username || `player-${req.session.userId}`;
-  }
-
-  const effectiveRole = coopRole(room, req.session.userId);
-  if (effectiveRole === "friend") room.status = "active";
-  room.updatedAt = Date.now();
-
-  return res.json({ ok: true, code, role: effectiveRole || role });
+  return res.status(410).json({ error: "Co-op mode is disabled." });
 });
 
 app.get("/api/coop/state/:code", async (req, res) => {
-  if (!isAuthed(req)) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-  cleanupCoopRooms();
-  const code = String(req.params.code || "").trim().toUpperCase();
-  if (!/^[A-Z0-9]{6}$/.test(code)) {
-    return res.status(400).json({ error: "Invalid room code." });
-  }
-  const room = coopRooms.get(code);
-  if (!room) return res.status(404).json({ error: "Room not found or expired." });
-  const role = coopRole(room, req.session.userId);
-  if (!role) return res.status(403).json({ error: "Not in this room." });
-
-  room.updatedAt = Date.now();
-  return res.json({
-    ok: true,
-    code,
-    role,
-    status: room.status,
-    players: {
-      host: room.hostName,
-      friend: room.friendName,
-    },
-    points: {
-      host: room.hostPoints,
-      friend: room.friendPoints,
-      total: room.hostPoints + room.friendPoints,
-    },
-    lastGame: {
-      host: room.hostLastGame,
-      friend: room.friendLastGame,
-    },
-  });
+  return res.status(410).json({ error: "Co-op mode is disabled." });
 });
 
 app.post("/api/coop/add-points", async (req, res) => {
-  if (!isAuthed(req)) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-  const code = String(req.body.code || "").trim().toUpperCase();
-  const points = Number(req.body.points || 0);
-  const game = String(req.body.game || "").slice(0, 64);
-  if (!/^[A-Z0-9]{6}$/.test(code)) {
-    return res.status(400).json({ error: "Invalid room code." });
-  }
-  if (!Number.isInteger(points) || points <= 0 || points > 10000) {
-    return res.status(400).json({ error: "Invalid points value." });
-  }
-
-  const room = coopRooms.get(code);
-  if (!room) return res.status(404).json({ error: "Room not found or expired." });
-  const role = coopRole(room, req.session.userId);
-  if (!role) return res.status(403).json({ error: "Not in this room." });
-
-  if (role === "host") {
-    room.hostPoints += points;
-    room.hostLastGame = game;
-  } else {
-    room.friendPoints += points;
-    room.friendLastGame = game;
-    room.status = "active";
-  }
-  room.updatedAt = Date.now();
-  return res.json({ ok: true });
+  return res.status(410).json({ error: "Co-op mode is disabled." });
 });
 
 app.post("/api/coop/leave", async (req, res) => {
-  if (!isAuthed(req)) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-  const code = String(req.body.code || "").trim().toUpperCase();
-  if (!/^[A-Z0-9]{6}$/.test(code)) {
-    return res.status(400).json({ error: "Invalid room code." });
-  }
-  const room = coopRooms.get(code);
-  if (!room) return res.json({ ok: true });
-  const role = coopRole(room, req.session.userId);
-  if (!role) return res.json({ ok: true });
-  coopRooms.delete(code);
-  return res.json({ ok: true });
+  return res.status(410).json({ error: "Co-op mode is disabled." });
 });
 
 app.post("/api/multiplayer/pong/create", async (req, res) => {
@@ -1885,6 +1798,34 @@ app.post("/api/progress/add", async (req, res) => {
     seasonPoints: nextSeasonPoints,
     multiplier: Number(event.multiplier || 1),
   });
+});
+
+app.post("/api/progress/last-game", async (req, res) => {
+  if (!isAuthed(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const gamePath = String(req.body.game || "").slice(0, 96);
+  const isAllowed =
+    gamePath === "/snake" ||
+    gamePath === "/shooter" ||
+    gamePath === "/2042" ||
+    gamePath === "/pong" ||
+    gamePath === "/pong-online" ||
+    gamePath === "/breakout" ||
+    gamePath === "/dodger" ||
+    gamePath.startsWith("/game/") ||
+    gamePath.startsWith("/uploaded/");
+
+  if (!isAllowed) {
+    return res.status(400).json({ error: "Invalid game path." });
+  }
+
+  await dbQuery(
+    "UPDATE user_progress SET last_game = $1, updated_at = NOW() WHERE user_id = $2",
+    [gamePath, req.session.userId]
+  );
+  return res.json({ ok: true, lastGame: gamePath });
 });
 
 app.post("/api/progress/buy", async (req, res) => {
@@ -2263,6 +2204,78 @@ app.post("/api/login", async (req, res) => {
   req.session.cookie.maxAge = remember
     ? 1000 * 60 * 60 * 24 * 30
     : 1000 * 60 * 60 * 24;
+
+  return res.json({ ok: true, redirect: "/dashboard" });
+});
+
+app.post("/api/password/forgot", async (req, res) => {
+  const email = normalizeEmail(req.body.email);
+  if (!isValidEmail(email)) {
+    return res.status(400).json({ error: "Please enter a valid email." });
+  }
+
+  const user = await dbGet("SELECT id, email_verified FROM users WHERE email = $1", [email]);
+  if (!user || !user.email_verified) {
+    return res.json({
+      ok: true,
+      message: "If this email exists, a reset code was sent.",
+      redirect: `/reset-password?email=${encodeURIComponent(email)}`,
+    });
+  }
+
+  const previous = await dbGet(
+    "SELECT last_sent_at FROM password_resets WHERE email = $1",
+    [email]
+  );
+  if (previous && Date.now() - Number(previous.last_sent_at) < 45 * 1000) {
+    return res.status(429).json({ error: "Please wait before requesting another code." });
+  }
+
+  try {
+    await issuePasswordResetCode(user.id, email);
+    return res.json({
+      ok: true,
+      message: "Reset code sent.",
+      redirect: `/reset-password?email=${encodeURIComponent(email)}`,
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || "Failed to send reset code." });
+  }
+});
+
+app.post("/api/password/reset", async (req, res) => {
+  const email = normalizeEmail(req.body.email);
+  const code = String(req.body.code || "").trim();
+  const newPassword = String(req.body.password || "");
+
+  if (!isValidEmail(email) || !/^\d{6}$/.test(code)) {
+    return res.status(400).json({ error: "Invalid email or code format." });
+  }
+  if (newPassword.length < 8) {
+    return res.status(400).json({ error: "Password must be at least 8 characters long." });
+  }
+
+  const reset = await dbGet(
+    "SELECT user_id, code_hash, expires_at FROM password_resets WHERE email = $1",
+    [email]
+  );
+  if (!reset) {
+    return res.status(400).json({ error: "Reset code not found. Request a new one." });
+  }
+  if (Date.now() > Number(reset.expires_at)) {
+    return res.status(400).json({ error: "Reset code expired. Request a new one." });
+  }
+  if (hashCode(code) !== reset.code_hash) {
+    return res.status(400).json({ error: "Incorrect reset code." });
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+  await dbQuery("UPDATE users SET password_hash = $1 WHERE id = $2", [passwordHash, reset.user_id]);
+  await dbQuery("DELETE FROM password_resets WHERE email = $1", [email]);
+
+  req.session.userId = Number(reset.user_id);
+  req.session.pendingEmail = null;
+  req.session.cookie.maxAge = 1000 * 60 * 60 * 24;
 
   return res.json({ ok: true, redirect: "/dashboard" });
 });
