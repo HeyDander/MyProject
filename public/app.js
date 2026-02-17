@@ -741,7 +741,7 @@ async function initCommunityGames() {
 
   try {
     const data = await requestJson("/api/uploaded-games", { method: "GET" });
-    const games = Array.isArray(data.games) ? data.games.filter((g) => !g.mine).slice(0, 200) : [];
+    const games = Array.isArray(data.games) ? data.games.slice(0, 200) : [];
     if (!games.length) {
       list.innerHTML = `<p class="hub-muted">${T("No community games yet.", "Пока нет игр от сообщества.")}</p>`;
       return;
@@ -749,7 +749,7 @@ async function initCommunityGames() {
     list.innerHTML = games
       .map(
         (g) =>
-          `<p class="hub-row"><span>${g.title} (${g.creator})</span><a class="btn btn-ghost" href="/uploaded/${g.slug}">${T("Play", "Играть")}</a></p>`
+          `<p class="hub-row"><span>${g.title} (${g.creator}${g.mine ? `, ${T("you", "ты")}` : ""})</span><a class="btn btn-ghost" href="/uploaded/${g.slug}">${T("Play", "Играть")}</a></p>`
       )
       .join("");
   } catch (_error) {
