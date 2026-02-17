@@ -581,27 +581,33 @@ function hashCode(code) {
 }
 
 function getMailConfig() {
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT || 0);
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  const from = process.env.FROM_EMAIL || process.env.SMTP_USER;
-  if (!host || !port || !user || !pass || !from) return null;
-  return { host, port, user, pass, from };
+  const host = process.env.SMTP_HOST || process.env.MAIL_HOST || "";
+  const portRaw = process.env.SMTP_PORT || process.env.MAIL_PORT || "587";
+  const port = Number(portRaw);
+  const user = process.env.SMTP_USER || process.env.MAIL_USER || "";
+  const pass =
+    process.env.SMTP_PASS ||
+    process.env.SMTP_PASSWORD ||
+    process.env.MAIL_PASS ||
+    process.env.MAIL_PASSWORD ||
+    "";
+  const from = process.env.FROM_EMAIL || process.env.SMTP_FROM || process.env.MAIL_FROM || user;
+  const secureRaw = String(process.env.SMTP_SECURE || process.env.MAIL_SECURE || "").toLowerCase();
+  const secure = secureRaw === "true" || secureRaw === "1" || port === 465;
+  if (!host || !Number.isFinite(port) || port <= 0 || !user || !pass || !from) return null;
+  return { host, port, user, pass, from, secure };
 }
 
 async function sendVerificationEmail(email, code) {
   const cfg = getMailConfig();
   if (!cfg) {
-    throw new Error(
-      "Email service is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, FROM_EMAIL."
-    );
+    throw new Error("Email service is unavailable. Try again later.");
   }
 
   const transporter = nodemailer.createTransport({
     host: cfg.host,
     port: cfg.port,
-    secure: cfg.port === 465,
+    secure: cfg.secure,
     auth: {
       user: cfg.user,
       pass: cfg.pass,
@@ -619,15 +625,13 @@ async function sendVerificationEmail(email, code) {
 async function sendPasswordResetEmail(email, code) {
   const cfg = getMailConfig();
   if (!cfg) {
-    throw new Error(
-      "Email service is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, FROM_EMAIL."
-    );
+    throw new Error("Email service is unavailable. Try again later.");
   }
 
   const transporter = nodemailer.createTransport({
     host: cfg.host,
     port: cfg.port,
-    secure: cfg.port === 465,
+    secure: cfg.secure,
     auth: {
       user: cfg.user,
       pass: cfg.pass,
@@ -682,9 +686,7 @@ async function issuePasswordResetCode(userId, email) {
     [email, userId, hashCode(code), expiresAt, now]
   );
 
-  if (getMailConfig()) {
-    await sendPasswordResetEmail(email, code);
-  }
+  await sendPasswordResetEmail(email, code);
   return code;
 }
 
@@ -2234,16 +2236,8 @@ app.post("/api/password/forgot", async (req, res) => {
     return res.status(429).json({ error: "Please wait before requesting another code." });
   }
 
-  const mailConfig = getMailConfig();
   try {
-    const code = await issuePasswordResetCode(user.id, email);
-    if (!mailConfig) {
-      return res.json({
-        ok: true,
-        message: "SMTP is not configured. Dev mode: code filled automatically.",
-        redirect: `/reset-password?email=${encodeURIComponent(email)}&code=${encodeURIComponent(code)}`,
-      });
-    }
+    await issuePasswordResetCode(user.id, email);
     return res.json({
       ok: true,
       message: "Reset code sent.",
