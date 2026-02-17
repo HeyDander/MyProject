@@ -748,18 +748,11 @@ function initUploadGameForm() {
     "html",
     "css",
     "javascript",
-    "typescript",
-    "python",
-    "java",
-    "csharp",
-    "cpp",
-    "json",
-    "text",
   ];
 
   const normalizeLanguage = (value) => {
     const lang = String(value || "").trim().toLowerCase();
-    return LANGS.includes(lang) ? lang : "text";
+    return LANGS.includes(lang) ? lang : "javascript";
   };
 
   const guessLanguageByName = (name) => {
@@ -767,13 +760,7 @@ function initUploadGameForm() {
     if (file.endsWith(".html") || file.endsWith(".htm")) return "html";
     if (file.endsWith(".css")) return "css";
     if (file.endsWith(".js") || file.endsWith(".mjs")) return "javascript";
-    if (file.endsWith(".ts")) return "typescript";
-    if (file.endsWith(".py")) return "python";
-    if (file.endsWith(".java")) return "java";
-    if (file.endsWith(".cs")) return "csharp";
-    if (file.endsWith(".cpp") || file.endsWith(".cc") || file.endsWith(".cxx")) return "cpp";
-    if (file.endsWith(".json")) return "json";
-    return "text";
+    return "javascript";
   };
 
   const addFileRow = (initial = {}) => {
@@ -803,9 +790,7 @@ function initUploadGameForm() {
 
     if (nameInput && languageSelect) {
       nameInput.addEventListener("change", () => {
-        if (languageSelect.value === "text") {
-          languageSelect.value = guessLanguageByName(nameInput.value);
-        }
+        languageSelect.value = guessLanguageByName(nameInput.value);
       });
     }
 
@@ -851,6 +836,7 @@ function initUploadGameForm() {
       .filter((f) => !["html", "css", "javascript"].includes(f.language))
       .map((f) => `${f.language}: ${f.name}`)
       .join(", ");
+    const hasWebCode = Boolean(htmlFile) || cssBundle.trim().length > 0 || jsBundle.trim().length > 0;
 
     if (!html.trim()) {
       html = `<!doctype html>
@@ -871,6 +857,18 @@ function initUploadGameForm() {
     }
     if (jsBundle) {
       html = injectIntoHtml(html, `<script>\n${jsBundle}\n</script>`, "</body>");
+    }
+    if (!hasWebCode) {
+      html = injectIntoHtml(
+        html,
+        `<script>
+          const app = document.getElementById("app");
+          if (app) {
+            app.innerHTML = "<div style=\\"padding:16px;font-family:system-ui;color:#eaf4ed\\">No runnable web code found. Add HTML/CSS/JavaScript file.</div>";
+          }
+        </script>`,
+        "</body>"
+      );
     }
     if (notes) {
       html = `${html}\n<!-- Additional files attached (not executable in browser): ${notes} -->`;
@@ -920,8 +918,8 @@ function initUploadGameForm() {
   if (addFileBtn) {
     addFileBtn.addEventListener("click", () => {
       addFileRow({
-        name: `file-${Date.now()}.txt`,
-        language: "text",
+        name: `file-${Date.now()}.js`,
+        language: "javascript",
         code: "",
       });
     });
