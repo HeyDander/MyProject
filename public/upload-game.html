@@ -38,16 +38,18 @@
             <textarea name="description" maxlength="220" rows="3" placeholder="Short game description"></textarea>
           </label>
 
-          <label>
-            HTML game code
-            <textarea
-              name="htmlContent"
-              rows="14"
-              minlength="60"
-              required
-              placeholder="<!doctype html> ..."
-            ></textarea>
-          </label>
+          <div class="upload-files-head">
+            <p class="hub-muted">Game files</p>
+            <button class="btn btn-ghost" type="button" data-add-upload-file>+ Add file</button>
+          </div>
+          <div class="upload-files-list" data-upload-files-list></div>
+          <textarea
+            name="htmlContent"
+            rows="14"
+            minlength="60"
+            placeholder="<!doctype html> ..."
+            style="display:none"
+          ></textarea>
 
           <label class="remember">
             <input type="checkbox" name="isPublished" checked />
@@ -64,7 +66,11 @@
           <pre class="code-preview">{
   "title": "My Runner",
   "description": "Avoid blocks and score points",
-  "htmlContent": "<!doctype html><html><body><h1>Game</h1></body></html>"
+  "files": [
+    { "name": "index.html", "language": "html", "code": "<!doctype html><html><body><h1>Game</h1></body></html>" },
+    { "name": "style.css", "language": "css", "code": "body { background: #111; color: #fff; }" },
+    { "name": "game.js", "language": "javascript", "code": "console.log('game start')" }
+  ]
 }</pre>
         </article>
 

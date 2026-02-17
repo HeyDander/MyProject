@@ -619,6 +619,44 @@ button:active {
   min-height: 160px;
 }
 
+.upload-files-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.upload-files-list {
+  display: grid;
+  gap: 10px;
+}
+
+.upload-file-item {
+  border: 1px solid rgba(112, 150, 129, 0.32);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(9, 16, 13, 0.72);
+  display: grid;
+  gap: 8px;
+}
+
+.upload-file-top {
+  display: grid;
+  grid-template-columns: 1fr 180px auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.upload-file-code {
+  min-height: 180px !important;
+}
+
+@media (max-width: 760px) {
+  .upload-file-top {
+    grid-template-columns: 1fr;
+  }
+}
+
 .scratch-builder,
 .scratch-preview {
   border: 1px solid rgba(112, 150, 129, 0.32);
