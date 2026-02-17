@@ -435,12 +435,13 @@ async function initDatabase() {
     CREATE TABLE IF NOT EXISTS users (
       id BIGSERIAL PRIMARY KEY,
       username TEXT,
-      email TEXT UNIQUE NOT NULL,
+      email TEXT NOT NULL,
       password_hash TEXT NOT NULL,
       email_verified BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  await dbQuery("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key");
 
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS user_progress (
@@ -2113,10 +2114,6 @@ app.post("/api/register", async (req, res) => {
       .status(400)
       .json({ error: "Password must be at least 8 characters long." });
   }
-  const exists = await dbGet("SELECT id FROM users WHERE email = $1", [email]);
-  if (exists) {
-    return res.status(409).json({ error: "Account with this email already exists." });
-  }
   const usernameExists = await dbGet("SELECT id FROM users WHERE lower(username) = lower($1)", [
     username,
   ]);
@@ -2153,25 +2150,37 @@ app.post("/api/register", async (req, res) => {
 });
 
 app.post("/api/login", async (req, res) => {
-  const email = normalizeEmail(req.body.email);
+  const identifierRaw = String(req.body.email || "").trim();
+  const email = normalizeEmail(identifierRaw);
+  const username = normalizeUsername(identifierRaw);
   const password = String(req.body.password || "");
   const remember = Boolean(req.body.remember);
 
-  if (!isValidEmail(email) || !password) {
-    return res.status(400).json({ error: "Invalid email or password." });
+  if (!identifierRaw || !password) {
+    return res.status(400).json({ error: "Invalid login or password." });
   }
 
-  const user = await dbGet("SELECT id, password_hash, email_verified FROM users WHERE email = $1", [
-    email,
-  ]);
+  let user = null;
+  if (username && username.length >= 3) {
+    user = await dbGet(
+      "SELECT id, password_hash, email_verified FROM users WHERE lower(username) = lower($1) ORDER BY id DESC LIMIT 1",
+      [username]
+    );
+  }
+  if (!user && isValidEmail(email)) {
+    user = await dbGet(
+      "SELECT id, password_hash, email_verified FROM users WHERE email = $1 ORDER BY id DESC LIMIT 1",
+      [email]
+    );
+  }
 
   if (!user) {
-    return res.status(401).json({ error: "Invalid email or password." });
+    return res.status(401).json({ error: "Invalid login or password." });
   }
 
   const ok = await bcrypt.compare(password, user.password_hash);
   if (!ok) {
-    return res.status(401).json({ error: "Invalid email or password." });
+    return res.status(401).json({ error: "Invalid login or password." });
   }
   if (!user.email_verified) {
     return res.status(403).json({ error: "Email is not verified. Please verify your email first." });
@@ -2193,7 +2202,10 @@ app.post("/api/password/forgot", async (req, res) => {
     return res.status(400).json({ error: "Please enter a valid email." });
   }
 
-  const user = await dbGet("SELECT id, email_verified FROM users WHERE email = $1", [email]);
+  const user = await dbGet(
+    "SELECT id, email_verified FROM users WHERE email = $1 ORDER BY id DESC LIMIT 1",
+    [email]
+  );
   if (!user || !user.email_verified) {
     return res.json({
       ok: true,
@@ -2265,7 +2277,10 @@ app.post("/api/verify/resend", async (req, res) => {
     return res.status(400).json({ error: "Invalid email." });
   }
 
-  const user = await dbGet("SELECT id, email_verified FROM users WHERE email = $1", [email]);
+  const user = await dbGet(
+    "SELECT id, email_verified FROM users WHERE email = $1 ORDER BY id DESC LIMIT 1",
+    [email]
+  );
   if (!user) {
     return res.status(404).json({ error: "Account not found." });
   }
