@@ -105,6 +105,15 @@ function initRussianLocale() {
     ["My Created Skins", "Мои созданные скины"],
     ["Uploaded Game", "Загруженная игра"],
     ["Upload Game From PC", "Загрузка игры с ПК"],
+    ["Game files", "Файлы игры"],
+    ["+ Add file", "+ Добавить файл"],
+    ["File name", "Имя файла"],
+    ["Code", "Код"],
+    ["Fullscreen", "Полный экран"],
+    ["Exit Fullscreen", "Выйти из полного экрана"],
+    ["Remove", "Удалить"],
+    ["Add at least one HTML file.", "Добавьте хотя бы один HTML файл."],
+    ["Games published by all players.", "Игры, опубликованные всеми игроками."],
     ["Open PC Guide", "Открыть гайд по ПК"],
     ["Open Upload Page", "Открыть страницу загрузки"],
     ["Community Games", "Игры сообщества"],
@@ -731,7 +740,133 @@ function initUploadGameForm() {
   const descriptionInput = form.querySelector('textarea[name="description"]');
   const htmlInput = form.querySelector('textarea[name="htmlContent"]');
   const publishInput = form.querySelector('input[name="isPublished"]');
+  const filesList = form.querySelector("[data-upload-files-list]");
+  const addFileBtn = form.querySelector("[data-add-upload-file]");
   const message = document.querySelector("[data-upload-game-message]");
+
+  const LANGS = [
+    "html",
+    "css",
+    "javascript",
+    "typescript",
+    "python",
+    "java",
+    "csharp",
+    "cpp",
+    "json",
+    "text",
+  ];
+
+  const normalizeLanguage = (value) => {
+    const lang = String(value || "").trim().toLowerCase();
+    return LANGS.includes(lang) ? lang : "text";
+  };
+
+  const guessLanguageByName = (name) => {
+    const file = String(name || "").trim().toLowerCase();
+    if (file.endsWith(".html") || file.endsWith(".htm")) return "html";
+    if (file.endsWith(".css")) return "css";
+    if (file.endsWith(".js") || file.endsWith(".mjs")) return "javascript";
+    if (file.endsWith(".ts")) return "typescript";
+    if (file.endsWith(".py")) return "python";
+    if (file.endsWith(".java")) return "java";
+    if (file.endsWith(".cs")) return "csharp";
+    if (file.endsWith(".cpp") || file.endsWith(".cc") || file.endsWith(".cxx")) return "cpp";
+    if (file.endsWith(".json")) return "json";
+    return "text";
+  };
+
+  const addFileRow = (initial = {}) => {
+    if (!filesList) return;
+    const item = document.createElement("div");
+    item.className = "upload-file-item";
+    item.innerHTML = `
+      <div class="upload-file-top">
+        <input type="text" data-upload-file-name placeholder="${T("File name", "Имя файла")}" maxlength="64" value="${String(initial.name || "").replace(/"/g, "&quot;")}" />
+        <select data-upload-file-language>
+          ${LANGS.map((lang) => `<option value="${lang}">${lang}</option>`).join("")}
+        </select>
+        <button class="btn btn-ghost" type="button" data-upload-file-remove>${T("Remove", "Удалить")}</button>
+      </div>
+      <textarea class="upload-file-code" data-upload-file-code rows="8" placeholder="${T("Code", "Код")}"></textarea>
+    `;
+    filesList.appendChild(item);
+
+    const nameInput = item.querySelector("[data-upload-file-name]");
+    const languageSelect = item.querySelector("[data-upload-file-language]");
+    const codeArea = item.querySelector("[data-upload-file-code]");
+    const removeBtn = item.querySelector("[data-upload-file-remove]");
+
+    const initialLang = normalizeLanguage(initial.language || guessLanguageByName(initial.name));
+    if (languageSelect) languageSelect.value = initialLang;
+    if (codeArea) codeArea.value = String(initial.code || "");
+
+    if (nameInput && languageSelect) {
+      nameInput.addEventListener("change", () => {
+        if (languageSelect.value === "text") {
+          languageSelect.value = guessLanguageByName(nameInput.value);
+        }
+      });
+    }
+
+    if (removeBtn) {
+      removeBtn.addEventListener("click", () => {
+        item.remove();
+      });
+    }
+  };
+
+  const collectFiles = () => {
+    if (!filesList) return [];
+    const rows = filesList.querySelectorAll(".upload-file-item");
+    return Array.from(rows)
+      .map((row) => {
+        const name = String(row.querySelector("[data-upload-file-name]")?.value || "").trim().slice(0, 64);
+        const language = normalizeLanguage(row.querySelector("[data-upload-file-language]")?.value || "");
+        const code = String(row.querySelector("[data-upload-file-code]")?.value || "");
+        return { name, language, code };
+      })
+      .filter((f) => f.name && f.code.trim().length > 0);
+  };
+
+  const injectIntoHtml = (html, insertion, closeTag) => {
+    const lower = html.toLowerCase();
+    const idx = lower.lastIndexOf(closeTag);
+    if (idx === -1) return `${html}\n${insertion}`;
+    return `${html.slice(0, idx)}\n${insertion}\n${html.slice(idx)}`;
+  };
+
+  const compileFilesToHtml = (files) => {
+    const htmlFile = files.find((f) => f.language === "html");
+    if (!htmlFile) {
+      throw new Error(T("Add at least one HTML file.", "Добавьте хотя бы один HTML файл."));
+    }
+
+    let html = String(htmlFile.code || "");
+    const cssBundle = files
+      .filter((f) => f.language === "css")
+      .map((f) => `/* ${f.name || "style.css"} */\n${f.code}`)
+      .join("\n\n");
+    const jsBundle = files
+      .filter((f) => f.language === "javascript")
+      .map((f) => `// ${f.name || "script.js"}\n${f.code}`)
+      .join("\n\n");
+    const notes = files
+      .filter((f) => !["html", "css", "javascript"].includes(f.language))
+      .map((f) => `${f.language}: ${f.name}`)
+      .join(", ");
+
+    if (cssBundle) {
+      html = injectIntoHtml(html, `<style>\n${cssBundle}\n</style>`, "</head>");
+    }
+    if (jsBundle) {
+      html = injectIntoHtml(html, `<script>\n${jsBundle}\n</script>`, "</body>");
+    }
+    if (notes) {
+      html = `${html}\n<!-- Additional files attached (not executable in browser): ${notes} -->`;
+    }
+    return html;
+  };
 
   const applyPackage = (pkg) => {
     if (!pkg || typeof pkg !== "object") {
@@ -741,8 +876,46 @@ function initUploadGameForm() {
     if (descriptionInput && typeof pkg.description === "string") {
       descriptionInput.value = pkg.description.slice(0, 220);
     }
-    if (htmlInput && typeof pkg.htmlContent === "string") htmlInput.value = pkg.htmlContent;
+    if (filesList) filesList.innerHTML = "";
+    if (Array.isArray(pkg.files) && pkg.files.length) {
+      pkg.files.forEach((f) => addFileRow(f));
+      if (htmlInput) {
+        try {
+          htmlInput.value = compileFilesToHtml(collectFiles());
+        } catch (_error) {
+          htmlInput.value = "";
+        }
+      }
+      return;
+    }
+    if (htmlInput && typeof pkg.htmlContent === "string") {
+      htmlInput.value = pkg.htmlContent;
+      addFileRow({
+        name: "index.html",
+        language: "html",
+        code: pkg.htmlContent,
+      });
+    }
   };
+
+  if (filesList && !filesList.children.length) {
+    addFileRow({
+      name: "index.html",
+      language: "html",
+      code:
+        "<!doctype html>\n<html>\n<head>\n  <meta charset=\"UTF-8\" />\n  <meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\" />\n  <title>My Game</title>\n</head>\n<body>\n  <h1>My Game</h1>\n  <script>console.log('Game started');</script>\n</body>\n</html>",
+    });
+  }
+
+  if (addFileBtn) {
+    addFileBtn.addEventListener("click", () => {
+      addFileRow({
+        name: `file-${Date.now()}.txt`,
+        language: "text",
+        code: "",
+      });
+    });
+  }
 
   if (fileInput) {
     fileInput.addEventListener("change", async () => {
@@ -770,10 +943,22 @@ function initUploadGameForm() {
     event.preventDefault();
     setMessage(message, "", false);
 
+    let compiledHtml = String(htmlInput?.value || "");
+    const files = collectFiles();
+    if (files.length) {
+      try {
+        compiledHtml = compileFilesToHtml(files);
+      } catch (error) {
+        setMessage(message, error.message || T("Compile failed.", "Сборка не удалась."), true);
+        return;
+      }
+    }
+    if (htmlInput) htmlInput.value = compiledHtml;
+
     const payload = {
       title: String(titleInput?.value || ""),
       description: String(descriptionInput?.value || ""),
-      htmlContent: String(htmlInput?.value || ""),
+      htmlContent: compiledHtml,
       isPublished: Boolean(publishInput?.checked),
     };
 
@@ -823,6 +1008,65 @@ function initLastGameResume() {
   }
 }
 
+function initFullscreenForGames() {
+  const gameTarget =
+    document.querySelector(".snake-board") ||
+    document.querySelector(".shooter-board") ||
+    document.querySelector(".arcade-board") ||
+    document.querySelector("[data-2042-board]") ||
+    document.querySelector(".ugc-frame") ||
+    document.querySelector("[data-uploaded-stage]");
+  if (!gameTarget) return;
+
+  const actions = document.querySelector(".dashboard-actions");
+  if (!actions || actions.querySelector("[data-fullscreen-btn]")) return;
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "btn btn-ghost";
+  button.setAttribute("data-fullscreen-btn", "true");
+
+  const getFullscreenElement = () =>
+    document.fullscreenElement || document.webkitFullscreenElement || null;
+
+  const updateLabel = () => {
+    button.textContent = getFullscreenElement()
+      ? T("Exit Fullscreen", "Выйти из полного экрана")
+      : T("Fullscreen", "Полный экран");
+  };
+
+  const requestFs = (el) => {
+    if (el.requestFullscreen) return el.requestFullscreen();
+    if (el.webkitRequestFullscreen) return el.webkitRequestFullscreen();
+    return Promise.resolve();
+  };
+
+  const exitFs = () => {
+    if (document.exitFullscreen) return document.exitFullscreen();
+    if (document.webkitExitFullscreen) return document.webkitExitFullscreen();
+    return Promise.resolve();
+  };
+
+  button.addEventListener("click", async () => {
+    try {
+      if (getFullscreenElement()) {
+        await exitFs();
+      } else {
+        await requestFs(gameTarget);
+      }
+    } catch (_error) {
+      // Ignore and keep page usable on devices without fullscreen API.
+    } finally {
+      updateLabel();
+    }
+  });
+
+  document.addEventListener("fullscreenchange", updateLabel);
+  document.addEventListener("webkitfullscreenchange", updateLabel);
+  updateLabel();
+  actions.insertBefore(button, actions.firstChild);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   initRussianLocale();
   initLanguageToggle();
@@ -839,4 +1083,6 @@ document.addEventListener("DOMContentLoaded", () => {
   initCommunityGames();
   initUploadGameForm();
   initLastGameResume();
+  initFullscreenForGames();
 });
+  

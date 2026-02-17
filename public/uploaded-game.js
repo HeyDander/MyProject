@@ -28,6 +28,7 @@
       const frame = document.createElement("iframe");
       frame.className = "ugc-frame";
       frame.sandbox = "allow-scripts allow-pointer-lock";
+      frame.allowFullscreen = true;
       frame.referrerPolicy = "no-referrer";
       frame.srcdoc = String(game.htmlContent || "");
       stage.replaceChildren(frame);
