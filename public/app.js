@@ -838,11 +838,7 @@ function initUploadGameForm() {
 
   const compileFilesToHtml = (files) => {
     const htmlFile = files.find((f) => f.language === "html");
-    if (!htmlFile) {
-      throw new Error(T("Add at least one HTML file.", "Добавьте хотя бы один HTML файл."));
-    }
-
-    let html = String(htmlFile.code || "");
+    let html = String(htmlFile?.code || "");
     const cssBundle = files
       .filter((f) => f.language === "css")
       .map((f) => `/* ${f.name || "style.css"} */\n${f.code}`)
@@ -855,6 +851,20 @@ function initUploadGameForm() {
       .filter((f) => !["html", "css", "javascript"].includes(f.language))
       .map((f) => `${f.language}: ${f.name}`)
       .join(", ");
+
+    if (!html.trim()) {
+      html = `<!doctype html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>Custom Game</title>
+</head>
+<body>
+  <div id="app"></div>
+</body>
+</html>`;
+    }
 
     if (cssBundle) {
       html = injectIntoHtml(html, `<style>\n${cssBundle}\n</style>`, "</head>");
