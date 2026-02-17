@@ -172,6 +172,14 @@ function initRussianLocale() {
     ["Create account", "Создать аккаунт"],
     ["Show", "Показать"],
     ["Hide", "Скрыть"],
+    ["Crystals", "Кристаллы"],
+    ["Crystals:", "Кристаллы:"],
+    ["crystals", "кристаллов"],
+    ["Claim", "Забрать"],
+    ["Claimed", "Забрано"],
+    ["Done", "Выполнено"],
+    ["In progress", "В процессе"],
+    ["reward", "награда"],
     ["Create your profile", "Создайте профиль"],
     ["Create your account in less than a minute", "Создайте аккаунт меньше чем за минуту"],
     ["Username", "Имя пользователя"],
@@ -285,6 +293,15 @@ function setMessage(messageEl, text, isError) {
   messageEl.textContent = text || "";
   messageEl.classList.toggle("is-error", Boolean(isError));
   messageEl.classList.toggle("is-success", !isError && Boolean(text));
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 function initAuthForm() {
@@ -444,10 +461,33 @@ async function initHubExtras() {
       .join("");
   };
 
+  const renderMissions = (missions) => {
+    if (!missionsList) return;
+    if (!missions.length) {
+      missionsList.innerHTML = `<p class="hub-muted">${T("No data yet.", "Пока нет данных.")}</p>`;
+      return;
+    }
+
+    missionsList.innerHTML = missions
+      .map((mission) => {
+        const status = mission.claimed
+          ? T("Claimed", "Забрано")
+          : mission.done
+            ? T("Done", "Выполнено")
+            : T("In progress", "В процессе");
+        const reward = `${Number(mission.rewardCrystals || 0)} ${T("crystals", "кристаллов")}`;
+        const action = mission.canClaim
+          ? `<button class="btn btn-ghost" type="button" data-mission-claim="${escapeHtml(mission.id)}">${T("Claim", "Забрать")}</button>`
+          : `<strong>${status}</strong>`;
+        return `<p class="hub-row"><span>${mission.done ? "✅" : "•"} ${escapeHtml(mission.label)} (${escapeHtml(String(mission.progress))}/${escapeHtml(String(mission.target))}) - ${T("reward", "награда")}: ${escapeHtml(reward)}</span>${action}</p>`;
+      })
+      .join("");
+  };
+
   const load = async () => {
     const data = await requestJson("/api/player/home", { method: "GET" });
     if (profileLine) {
-      profileLine.textContent = `${data.profile.username} | ${T("Total points", "Всего очков")}: ${data.profile.points} | ${T("Streak", "Серия")}: ${data.profile.dailyStreak}`;
+      profileLine.textContent = `${data.profile.username} | ${T("Total points", "Всего очков")}: ${data.profile.points} | ${T("Crystals", "Кристаллы")}: ${Number(data.profile.crystals || 0)} | ${T("Streak", "Серия")}: ${data.profile.dailyStreak}`;
     }
     if (seasonLine) {
       seasonLine.textContent = `${T("Season points", "Сезонные очки")}: ${data.profile.seasonPoints} | ${T("Season rank", "Место в сезоне")}: #${data.profile.seasonRank}`;
@@ -459,13 +499,7 @@ async function initHubExtras() {
       lastGameLine.textContent = `${T("Last game", "Последняя игра")}: ${lastGame}`;
     }
 
-    renderRows(
-      missionsList,
-      (data.missions || []).map((m) => ({
-        left: `${m.done ? "✅" : "•"} ${m.label}`,
-        right: `${m.progress}/${m.target}`,
-      }))
-    );
+    renderMissions(Array.isArray(data.missions) ? data.missions : []);
 
     renderRows(
       achievementsList,
@@ -606,6 +640,36 @@ async function initHubExtras() {
       if (!(target instanceof HTMLElement)) return;
       const cancelId = target.getAttribute("data-request-cancel");
       if (cancelId) onRequestAction("reject", cancelId);
+    });
+  }
+
+  if (missionsList) {
+    missionsList.addEventListener("click", async (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const missionId = target.getAttribute("data-mission-claim");
+      if (!missionId) return;
+      try {
+        await requestJson("/api/missions/claim", {
+          method: "POST",
+          body: JSON.stringify({ missionId }),
+        });
+        if (friendMsg) {
+          friendMsg.textContent = T("Mission reward claimed.", "Награда за миссию получена.");
+          friendMsg.classList.remove("is-error");
+          friendMsg.classList.add("is-success");
+        }
+        await load();
+        if (window.GameSkins && typeof window.GameSkins.refreshProgress === "function") {
+          await window.GameSkins.refreshProgress();
+        }
+      } catch (error) {
+        if (friendMsg) {
+          friendMsg.textContent = error.message || T("Failed to claim mission reward.", "Не удалось забрать награду.");
+          friendMsg.classList.remove("is-success");
+          friendMsg.classList.add("is-error");
+        }
+      }
     });
   }
 }

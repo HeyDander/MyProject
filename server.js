@@ -20,12 +20,14 @@ const PONG_ROOM_IDLE_DROP_MS = 1000 * 60 * 10;
 const COOP_ROOM_TTL_MS = 1000 * 60 * 60 * 6;
 const COOP_ROOM_IDLE_DROP_MS = 1000 * 60 * 30;
 const ALLOWED_CHALLENGE_IDS = new Set(["game-001", "game-010"]);
-const DAILY_MISSIONS = [
-  { id: "daily_points_120", label: "Earn 120 points today", type: "day_points", target: 120 },
-  { id: "daily_points_260", label: "Earn 260 points today", type: "day_points", target: 260 },
-  { id: "daily_buy_skin", label: "Buy 1 skin today", type: "day_buys", target: 1 },
-  { id: "daily_streak_3", label: "Reach 3-day streak", type: "streak", target: 3 },
-  { id: "daily_streak_7", label: "Reach 7-day streak", type: "streak", target: 7 },
+const DAILY_MISSION_POOL = [
+  { id: "daily_points_120", label: "Earn 120 points today", type: "day_points", target: 120, rewardCrystals: 6 },
+  { id: "daily_points_260", label: "Earn 260 points today", type: "day_points", target: 260, rewardCrystals: 12 },
+  { id: "daily_points_420", label: "Earn 420 points today", type: "day_points", target: 420, rewardCrystals: 18 },
+  { id: "daily_buy_skin", label: "Buy 1 skin today", type: "day_buys", target: 1, rewardCrystals: 8 },
+  { id: "daily_buy_two", label: "Buy 2 skins today", type: "day_buys", target: 2, rewardCrystals: 14 },
+  { id: "daily_streak_3", label: "Reach 3-day streak", type: "streak", target: 3, rewardCrystals: 10 },
+  { id: "daily_streak_7", label: "Reach 7-day streak", type: "streak", target: 7, rewardCrystals: 20 },
 ];
 const ACHIEVEMENTS = [
   { id: "ach_first_100", title: "Первые 100", type: "points", target: 100 },
@@ -139,7 +141,15 @@ for (const id of preservedSkinIds) {
 }
 for (let i = 1; i <= MAX_SKINS - preservedSkinIds.length; i += 1) {
   const id = `artist-${String(i).padStart(2, "0")}`;
-  rebuiltSkinCatalog[id] = { cost: 180 + i * 22 };
+  if (i <= 8) {
+    rebuiltSkinCatalog[id] = {
+      cost: 0,
+      crystalCost: 20 + i * 8,
+      exclusive: true,
+    };
+  } else {
+    rebuiltSkinCatalog[id] = { cost: 180 + i * 22 };
+  }
 }
 for (const id of Object.keys(SKIN_CATALOG)) {
   delete SKIN_CATALOG[id];
@@ -221,7 +231,7 @@ function seasonKey() {
 
 function missionSetForToday() {
   const key = Number(todayKey().replace(/-/g, ""));
-  const list = [...DAILY_MISSIONS];
+  const list = [...DAILY_MISSION_POOL];
   const picked = [];
   let x = key || 1;
   while (picked.length < 3 && list.length) {
@@ -229,6 +239,22 @@ function missionSetForToday() {
     picked.push(list.splice(x % list.length, 1)[0]);
   }
   return picked;
+}
+
+function missionProgressValue(progress, mission) {
+  if (mission.type === "day_points") return Number(progress.dayPoints || 0);
+  if (mission.type === "day_buys") return Number(progress.dayBuys || 0);
+  if (mission.type === "streak") return Number(progress.dailyStreak || 0);
+  return 0;
+}
+
+function parseJsonArray(value) {
+  try {
+    const parsed = JSON.parse(String(value || "[]"));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_error) {
+    return [];
+  }
 }
 
 function currentEvent() {
@@ -461,6 +487,9 @@ async function initDatabase() {
   await ensureColumn("user_progress", "day_buys", "INTEGER NOT NULL DEFAULT 0");
   await ensureColumn("user_progress", "skins_bought", "INTEGER NOT NULL DEFAULT 0");
   await ensureColumn("user_progress", "last_game", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn("user_progress", "crystals", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn("user_progress", "missions_key", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn("user_progress", "missions_claimed", "TEXT NOT NULL DEFAULT '[]'");
 
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS email_verifications (
@@ -794,7 +823,8 @@ async function ensureProgress(userId) {
     SELECT
       user_id, points, owned_skins, selected_skin,
       season_key, season_points, last_seen_day, daily_streak,
-      day_key, day_points, day_buys, skins_bought, last_game
+      day_key, day_points, day_buys, skins_bought, last_game,
+      crystals, missions_key, missions_claimed
     FROM user_progress
     WHERE user_id = $1
     `,
@@ -811,6 +841,9 @@ async function ensureProgress(userId) {
     let nextDayKey = row.day_key || todayKey();
     let nextDayPoints = Number(row.day_points || 0);
     let nextDayBuys = Number(row.day_buys || 0);
+    let nextCrystals = Number(row.crystals || 0);
+    let nextMissionsKey = row.missions_key || nextDayKey;
+    let nextMissionsClaimed = parseJsonArray(row.missions_claimed);
 
     const today = todayKey();
     const yesterday = yesterdayKey();
@@ -829,6 +862,10 @@ async function ensureProgress(userId) {
       nextDayPoints = 0;
       nextDayBuys = 0;
     }
+    if (nextMissionsKey !== nextDayKey) {
+      nextMissionsKey = nextDayKey;
+      nextMissionsClaimed = [];
+    }
 
     if (!ownedSkins.includes(selectedSkin)) {
       selectedSkin = "classic";
@@ -842,7 +879,10 @@ async function ensureProgress(userId) {
       nextStreak !== Number(row.daily_streak || 0) ||
       nextDayKey !== (row.day_key || "") ||
       nextDayPoints !== Number(row.day_points || 0) ||
-      nextDayBuys !== Number(row.day_buys || 0);
+      nextDayBuys !== Number(row.day_buys || 0) ||
+      nextCrystals !== Number(row.crystals || 0) ||
+      nextMissionsKey !== (row.missions_key || "") ||
+      JSON.stringify(nextMissionsClaimed) !== String(row.missions_claimed || "[]");
 
     if (needWrite) {
       await dbQuery(
@@ -858,8 +898,11 @@ async function ensureProgress(userId) {
           day_key = $7,
           day_points = $8,
           day_buys = $9,
+          crystals = $10,
+          missions_key = $11,
+          missions_claimed = $12,
           updated_at = NOW()
-        WHERE user_id = $10
+        WHERE user_id = $13
         `,
         [
           JSON.stringify(ownedSkins),
@@ -871,6 +914,9 @@ async function ensureProgress(userId) {
           nextDayKey,
           nextDayPoints,
           nextDayBuys,
+          nextCrystals,
+          nextMissionsKey,
+          JSON.stringify(nextMissionsClaimed),
           userId,
         ]
       );
@@ -889,6 +935,9 @@ async function ensureProgress(userId) {
       dayBuys: nextDayBuys,
       skinsBought: Number(row.skins_bought || 0),
       lastGame: row.last_game || "",
+      crystals: nextCrystals,
+      missionsKey: nextMissionsKey,
+      missionsClaimed: nextMissionsClaimed,
     };
   }
 
@@ -899,9 +948,10 @@ async function ensureProgress(userId) {
     INSERT INTO user_progress (
       user_id, points, owned_skins, selected_skin,
       season_key, season_points, last_seen_day, daily_streak,
-      day_key, day_points, day_buys, skins_bought, last_game
+      day_key, day_points, day_buys, skins_bought, last_game,
+      crystals, missions_key, missions_claimed
     )
-    VALUES ($1, 0, $2, $3, $4, 0, $5, 1, $5, 0, 0, 0, '')
+    VALUES ($1, 0, $2, $3, $4, 0, $5, 1, $5, 0, 0, 0, '', 0, $5, '[]')
     ON CONFLICT (user_id) DO NOTHING
     `,
     [userId, JSON.stringify(["classic"]), "classic", season, today]
@@ -920,6 +970,9 @@ async function ensureProgress(userId) {
     dayBuys: 0,
     skinsBought: 0,
     lastGame: "",
+    crystals: 0,
+    missionsKey: today,
+    missionsClaimed: [],
   };
 }
 
@@ -1158,18 +1211,20 @@ app.get("/api/player/home", async (req, res) => {
 
   const progress = await ensureProgress(req.session.userId);
   await unlockAchievements(req.session.userId, progress);
+  const claimedSet = new Set(progress.missionsClaimed || []);
   const missions = missionSetForToday().map((mission) => {
-    let progressValue = 0;
-    if (mission.type === "day_points") progressValue = Number(progress.dayPoints || 0);
-    if (mission.type === "day_buys") progressValue = Number(progress.dayBuys || 0);
-    if (mission.type === "streak") progressValue = Number(progress.dailyStreak || 0);
+    const progressValue = missionProgressValue(progress, mission);
     const done = progressValue >= mission.target;
+    const claimed = claimedSet.has(mission.id);
     return {
       id: mission.id,
       label: mission.label,
       progress: Math.min(progressValue, mission.target),
       target: mission.target,
       done,
+      claimed,
+      canClaim: done && !claimed,
+      rewardCrystals: Number(mission.rewardCrystals || 0),
     };
   });
 
@@ -1216,6 +1271,7 @@ app.get("/api/player/home", async (req, res) => {
     profile: {
       username: meUser.username || `player-${req.session.userId}`,
       points: Number(progress.points || 0),
+      crystals: Number(progress.crystals || 0),
       seasonPoints: Number(progress.seasonPoints || 0),
       dailyStreak: Number(progress.dailyStreak || 0),
       seasonRank: Number(seasonRankRow?.rank || 0),
@@ -1226,6 +1282,52 @@ app.get("/api/player/home", async (req, res) => {
     event,
     friendsTop,
     shareText: `Player ${meUser.username || `player-${req.session.userId}`} | Season points: ${Number(progress.seasonPoints || 0)} | Total points: ${Number(progress.points || 0)}`,
+  });
+});
+
+app.post("/api/missions/claim", async (req, res) => {
+  if (!isAuthed(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const missionId = String(req.body.missionId || "").trim();
+  if (!missionId) {
+    return res.status(400).json({ error: "Mission id is required." });
+  }
+
+  const progress = await ensureProgress(req.session.userId);
+  const mission = missionSetForToday().find((m) => m.id === missionId);
+  if (!mission) {
+    return res.status(400).json({ error: "Mission is not active today." });
+  }
+
+  const claimed = new Set(progress.missionsClaimed || []);
+  if (claimed.has(missionId)) {
+    return res.status(409).json({ error: "Mission reward already claimed." });
+  }
+
+  const progressValue = missionProgressValue(progress, mission);
+  if (progressValue < mission.target) {
+    return res.status(400).json({ error: "Mission is not completed yet." });
+  }
+
+  claimed.add(missionId);
+  const reward = Number(mission.rewardCrystals || 0);
+  const nextCrystals = Number(progress.crystals || 0) + reward;
+  await dbQuery(
+    `
+    UPDATE user_progress
+    SET crystals = $1, missions_key = $2, missions_claimed = $3, updated_at = NOW()
+    WHERE user_id = $4
+    `,
+    [nextCrystals, progress.missionsKey || todayKey(), JSON.stringify(Array.from(claimed)), req.session.userId]
+  );
+
+  return res.json({
+    ok: true,
+    crystals: nextCrystals,
+    rewardCrystals: reward,
+    missionId,
   });
 });
 
@@ -1616,7 +1718,9 @@ app.get("/api/progress", async (req, res) => {
   const baseCatalog = Object.entries(SKIN_CATALOG).map(([id, data]) => ({
     id,
     name: skinNameFromId(id),
-    cost: data.cost,
+    cost: Number(data.cost || 0),
+    crystalCost: Number(data.crystalCost || 0),
+    exclusive: Boolean(data.exclusive),
     isCustom: false,
   }));
   const customCatalog = (await listVisibleCustomSkins(req.session.userId))
@@ -1627,6 +1731,8 @@ app.get("/api/progress", async (req, res) => {
           id: row.id,
           name: row.name,
           cost: Number(row.list_price || 0),
+          crystalCost: 0,
+          exclusive: false,
           isCustom: true,
           isListed: Boolean(row.is_listed),
           createdBy: row.creator_username || `player-${row.creator_user_id}`,
@@ -1640,6 +1746,7 @@ app.get("/api/progress", async (req, res) => {
     .filter(Boolean);
   return res.json({
     points: progress.points,
+    crystals: progress.crystals,
     seasonPoints: progress.seasonPoints,
     dailyStreak: progress.dailyStreak,
     ownedSkins: progress.ownedSkins,
@@ -1865,10 +1972,12 @@ app.post("/api/progress/buy", async (req, res) => {
     return res.status(409).json({ error: "Skin already owned." });
   }
 
-  let cost = 0;
+  let costPoints = 0;
+  let costCrystals = 0;
   if (baseSkin) {
-    cost = Number(baseSkin.cost || 0);
-    if (cost === 0) {
+    costPoints = Number(baseSkin.cost || 0);
+    costCrystals = Number(baseSkin.crystalCost || 0);
+    if (costPoints <= 0 && costCrystals <= 0) {
       return res.status(400).json({ error: "This skin is already free." });
     }
   } else {
@@ -1878,19 +1987,23 @@ app.post("/api/progress/buy", async (req, res) => {
     if (Number(customSkin.creator_user_id) === Number(req.session.userId)) {
       return res.status(400).json({ error: "You already own your custom skin." });
     }
-    cost = Number(customSkin.list_price || 0);
+    costPoints = Number(customSkin.list_price || 0);
   }
 
-  if (progress.points < cost) {
+  if (costCrystals > 0 && progress.crystals < costCrystals) {
+    return res.status(400).json({ error: "Not enough crystals." });
+  }
+  if (costPoints > 0 && progress.points < costPoints) {
     return res.status(400).json({ error: "Not enough points." });
   }
 
-  const nextPoints = progress.points - cost;
+  const nextPoints = progress.points - costPoints;
+  const nextCrystals = Number(progress.crystals || 0) - costCrystals;
   const nextOwnedSkins = [...progress.ownedSkins, skinId];
 
   await dbQuery(
-    "UPDATE user_progress SET points = $1, owned_skins = $2, day_buys = day_buys + 1, skins_bought = skins_bought + 1, updated_at = NOW() WHERE user_id = $3",
-    [nextPoints, JSON.stringify(nextOwnedSkins), req.session.userId]
+    "UPDATE user_progress SET points = $1, crystals = $2, owned_skins = $3, day_buys = day_buys + 1, skins_bought = skins_bought + 1, updated_at = NOW() WHERE user_id = $4",
+    [nextPoints, nextCrystals, JSON.stringify(nextOwnedSkins), req.session.userId]
   );
   await unlockAchievements(req.session.userId, {
     ...progress,
@@ -1900,7 +2013,7 @@ app.post("/api/progress/buy", async (req, res) => {
   if (customSkin) {
     const sellerProgress = await ensureProgress(customSkin.creator_user_id);
     await dbQuery("UPDATE user_progress SET points = $1, updated_at = NOW() WHERE user_id = $2", [
-      sellerProgress.points + cost,
+      sellerProgress.points + costPoints,
       customSkin.creator_user_id,
     ]);
   }
@@ -1908,6 +2021,7 @@ app.post("/api/progress/buy", async (req, res) => {
   return res.json({
     ok: true,
     points: nextPoints,
+    crystals: nextCrystals,
     seasonPoints: progress.seasonPoints,
     ownedSkins: nextOwnedSkins,
     selectedSkin: progress.selectedSkin,
@@ -1937,6 +2051,7 @@ app.post("/api/progress/select", async (req, res) => {
   return res.json({
     ok: true,
     points: progress.points,
+    crystals: progress.crystals,
     ownedSkins: progress.ownedSkins,
     selectedSkin: skinId,
   });
@@ -1963,29 +2078,34 @@ app.post("/api/progress/sell", async (req, res) => {
     return res.status(400).json({ error: "Unknown skin." });
   }
 
-  const refund = baseSkin
+  const refundPoints = baseSkin
     ? Number(baseSkin.cost || 0)
     : Math.max(0, Number(customSkin.list_price || 0));
+  const refundCrystals = baseSkin ? Number(baseSkin.crystalCost || 0) : 0;
   const nextOwnedSkins = progress.ownedSkins.filter((id) => id !== skinId);
   const nextSelectedSkin = progress.selectedSkin === skinId ? "classic" : progress.selectedSkin;
-  const nextPoints = progress.points + refund;
+  const nextPoints = progress.points + refundPoints;
+  const nextCrystals = Number(progress.crystals || 0) + refundCrystals;
 
   await dbQuery(
     `
     UPDATE user_progress
-    SET points = $1, owned_skins = $2, selected_skin = $3, updated_at = NOW()
-    WHERE user_id = $4
+    SET points = $1, crystals = $2, owned_skins = $3, selected_skin = $4, updated_at = NOW()
+    WHERE user_id = $5
     `
     ,
-    [nextPoints, JSON.stringify(nextOwnedSkins), nextSelectedSkin, req.session.userId]
+    [nextPoints, nextCrystals, JSON.stringify(nextOwnedSkins), nextSelectedSkin, req.session.userId]
   );
 
   return res.json({
     ok: true,
     points: nextPoints,
+    crystals: nextCrystals,
     ownedSkins: nextOwnedSkins,
     selectedSkin: nextSelectedSkin,
-    refunded: refund,
+    refunded: refundPoints + refundCrystals,
+    refundedPoints: refundPoints,
+    refundedCrystals: refundCrystals,
   });
 });
 

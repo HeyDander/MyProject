@@ -91,6 +91,7 @@ const SKIN_MAP = new Map(CORE_SKINS.map((skin) => [skin.id, skin]));
 const skinState = {
   loaded: false,
   points: 0,
+  crystals: 0,
   ownedSkins: ["classic"],
   selectedSkin: "classic",
   pendingPoints: 0,
@@ -179,6 +180,7 @@ function emitSkinChange() {
         selectedSkin: skinState.selectedSkin,
         skin: getCurrentSkin(),
         points: skinState.points,
+        crystals: skinState.crystals,
       },
     })
   );
@@ -188,6 +190,10 @@ function updateProgressUI() {
   const pointsNodes = document.querySelectorAll("[data-points]");
   for (const node of pointsNodes) {
     node.textContent = String(skinState.points);
+  }
+  const crystalsNodes = document.querySelectorAll("[data-crystals]");
+  for (const node of crystalsNodes) {
+    node.textContent = String(skinState.crystals);
   }
 
   const skinNameNodes = document.querySelectorAll("[data-skin-name]");
@@ -229,6 +235,8 @@ function ensureCatalog(serverCatalog) {
       id: entry.id,
       name: entry.name || entry.id,
       cost: entry.cost,
+      crystalCost: Number(entry.crystalCost || 0),
+      exclusive: Boolean(entry.exclusive),
       palette,
       isCustom: Boolean(entry.isCustom),
       createdBy: entry.createdBy || "",
@@ -248,6 +256,7 @@ async function loadProgress() {
     .then((data) => {
       ensureCatalog(Array.isArray(data.skinCatalog) ? data.skinCatalog : []);
       skinState.points = Number(data.points || 0);
+      skinState.crystals = Number(data.crystals || 0);
       skinState.ownedSkins = Array.isArray(data.ownedSkins) ? data.ownedSkins : ["classic"];
       skinState.selectedSkin = data.selectedSkin || "classic";
       if (!skinState.ownedSkins.includes("classic")) {
@@ -272,17 +281,25 @@ function refreshProgress() {
   return loadProgress();
 }
 
+function skinPriceText(skin) {
+  if (Number(skin.crystalCost || 0) > 0) {
+    return `${skin.crystalCost} ${TT("crystals", "кристаллов")}`;
+  }
+  return `${skin.cost} ${TT("points", "очков")}`;
+}
+
 function actionButtonLabel(skin, mode) {
-  if (skinState.selectedSkin === skin.id) return "Selected";
-  if (skinState.ownedSkins.includes(skin.id)) return "Use";
-  return mode === "owned" ? "Locked" : `Buy (${skin.cost})`;
+  if (skinState.selectedSkin === skin.id) return TT("Selected", "Выбран");
+  if (skinState.ownedSkins.includes(skin.id)) return TT("Use", "Надеть");
+  return mode === "owned" ? TT("Locked", "Закрыт") : `${TT("Buy", "Купить")} (${skinPriceText(skin)})`;
 }
 
 function actionButtonDisabled(skin, mode) {
   if (skinState.selectedSkin === skin.id) return true;
   if (skinState.ownedSkins.includes(skin.id)) return false;
   if (mode === "owned") return true;
-  return skinState.points < skin.cost;
+  if (Number(skin.crystalCost || 0) > 0) return skinState.crystals < Number(skin.crystalCost || 0);
+  return skinState.points < Number(skin.cost || 0);
 }
 
 async function onSkinAction(skinId) {
@@ -298,6 +315,7 @@ async function onSkinAction(skinId) {
         body: JSON.stringify({ skinId }),
       });
       skinState.points = result.points;
+      skinState.crystals = Number(result.crystals || skinState.crystals || 0);
       skinState.ownedSkins = result.ownedSkins;
       setShopMessage(`${skin.name} ${TT("purchased.", "куплен.")}`, false);
     }
@@ -309,6 +327,7 @@ async function onSkinAction(skinId) {
 
     skinState.selectedSkin = selected.selectedSkin;
     skinState.points = selected.points;
+    skinState.crystals = Number(selected.crystals || skinState.crystals || 0);
     skinState.ownedSkins = selected.ownedSkins;
     setShopMessage(`${skin.name} ${TT("equipped.", "выбран.")}`, false);
     updateProgressUI();
@@ -327,9 +346,20 @@ async function onSkinRemove(skinId) {
       body: JSON.stringify({ skinId }),
     });
     skinState.points = result.points;
+    skinState.crystals = Number(result.crystals || skinState.crystals || 0);
     skinState.ownedSkins = result.ownedSkins;
     skinState.selectedSkin = result.selectedSkin;
-    setShopMessage(`${skin.name} ${TT("removed", "удален")} (+${result.refunded} ${TT("points", "очков")}).`, false);
+    if (Number(result.refundedCrystals || 0) > 0) {
+      setShopMessage(
+        `${skin.name} ${TT("removed", "удален")} (+${result.refundedCrystals} ${TT("crystals", "кристаллов")}).`,
+        false
+      );
+    } else {
+      setShopMessage(
+        `${skin.name} ${TT("removed", "удален")} (+${result.refundedPoints || result.refunded} ${TT("points", "очков")}).`,
+        false
+      );
+    }
     updateProgressUI();
   } catch (error) {
     setShopMessage(error.message || TT("Failed to remove skin.", "Не удалось удалить скин."), true);
@@ -361,6 +391,7 @@ async function onSkinDelete(skinId) {
     });
     if (result && Array.isArray(result.ownedSkins)) {
       skinState.points = Number(result.points || 0);
+      skinState.crystals = Number(result.crystals || skinState.crystals || 0);
       skinState.ownedSkins = result.ownedSkins;
       skinState.selectedSkin = result.selectedSkin || "classic";
       skinState.catalog = skinState.catalog.filter((skin) => skin.id !== skinId);
@@ -417,7 +448,7 @@ function renderShop() {
       price.className = "skin-price";
       price.textContent = skinState.ownedSkins.includes(skin.id)
         ? TT("Owned", "Куплен")
-        : `${skin.cost} ${TT("points", "очков")}`;
+        : skinPriceText(skin);
 
       const meta = document.createElement("p");
       meta.className = "skin-meta";
@@ -447,7 +478,10 @@ function renderShop() {
       if (canRemove) {
         const removeBtn = document.createElement("button");
         removeBtn.className = "btn btn-ghost skin-action skin-remove";
-        removeBtn.textContent = `Remove (+${Math.max(0, Number(skin.cost || 0))})`;
+        const refundText = Number(skin.crystalCost || 0) > 0
+          ? `+${Math.max(0, Number(skin.crystalCost || 0))} ${TT("crystals", "кристаллов")}`
+          : `+${Math.max(0, Number(skin.cost || 0))} ${TT("points", "очков")}`;
+        removeBtn.textContent = `${TT("Remove", "Удалить")} (${refundText})`;
         removeBtn.addEventListener("click", () => onSkinRemove(skin.id));
         actions.appendChild(removeBtn);
       }
@@ -574,6 +608,7 @@ function awardPoints(points) {
 window.GameSkins = {
   getCurrentSkin,
   awardPoints,
+  refreshProgress,
 };
 
 document.addEventListener("DOMContentLoaded", () => {
