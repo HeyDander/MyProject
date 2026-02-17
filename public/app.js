@@ -88,6 +88,8 @@ function initRussianLocale() {
     ["No outgoing requests.", "Нет исходящих заявок."],
     ["No uploaded games yet.", "Пока нет загруженных игр."],
     ["No community games yet.", "Пока нет игр от сообщества."],
+    ["Delete game", "Удалить игру"],
+    ["Game deleted.", "Игра удалена."],
     ["Request sent.", "Заявка отправлена."],
     ["Request accepted.", "Заявка принята."],
     ["Request closed.", "Заявка закрыта."],
@@ -691,22 +693,46 @@ async function initUploadedGames() {
   const list = document.querySelector("[data-uploaded-games-list]");
   if (!list) return;
 
-  try {
-    const data = await requestJson("/api/uploaded-games", { method: "GET" });
-    const games = Array.isArray(data.games) ? data.games.slice(0, 12) : [];
-    if (!games.length) {
-      list.innerHTML = `<p class="hub-muted">${T("No uploaded games yet.", "Пока нет загруженных игр.")}</p>`;
-      return;
+  const load = async () => {
+    try {
+      const data = await requestJson("/api/uploaded-games", { method: "GET" });
+      const games = Array.isArray(data.games) ? data.games.slice(0, 20) : [];
+      if (!games.length) {
+        list.innerHTML = `<p class="hub-muted">${T("No uploaded games yet.", "Пока нет загруженных игр.")}</p>`;
+        return;
+      }
+      list.innerHTML = games
+        .map((g) => {
+          const deleteBtn = g.mine
+            ? `<button class="btn btn-ghost" type="button" data-delete-uploaded="${g.slug}">${T("Delete game", "Удалить игру")}</button>`
+            : "";
+          return `<p class="hub-row"><span>${g.title}</span><span><a class="btn btn-ghost" href="/uploaded/${g.slug}">${T("Play", "Играть")}</a> ${deleteBtn}</span></p>`;
+        })
+        .join("");
+    } catch (_error) {
+      list.innerHTML = `<p class="hub-muted">${T("Failed to load uploaded games.", "Не удалось загрузить загруженные игры.")}</p>`;
     }
-    list.innerHTML = games
-      .map(
-        (g) =>
-          `<p class="hub-row"><span>${g.title}</span><a class="btn btn-ghost" href="/uploaded/${g.slug}">Play</a></p>`
-      )
-      .join("");
-  } catch (_error) {
-    list.innerHTML = `<p class="hub-muted">${T("Failed to load uploaded games.", "Не удалось загрузить загруженные игры.")}</p>`;
-  }
+  };
+
+  list.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const slug = target.getAttribute("data-delete-uploaded");
+    if (!slug) return;
+    const ok = window.confirm(T("Delete this game?", "Удалить эту игру?"));
+    if (!ok) return;
+    try {
+      await requestJson("/api/uploaded-games/delete", {
+        method: "POST",
+        body: JSON.stringify({ slug }),
+      });
+      await load();
+    } catch (error) {
+      list.innerHTML = `<p class="hub-muted">${error.message || T("Delete failed.", "Не удалось удалить игру.")}</p>`;
+    }
+  });
+
+  await load();
 }
 
 async function initCommunityGames() {

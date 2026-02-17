@@ -1754,6 +1754,31 @@ app.post("/api/uploaded-games/create", async (req, res) => {
   return res.json({ ok: true, slug });
 });
 
+app.post("/api/uploaded-games/delete", async (req, res) => {
+  if (!isAuthed(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const slug = normalizeSlug(req.body.slug);
+  if (!slug) {
+    return res.status(400).json({ error: "Invalid game id." });
+  }
+
+  const game = await dbGet(
+    "SELECT id, creator_user_id FROM uploaded_games WHERE slug = $1",
+    [slug]
+  );
+  if (!game) {
+    return res.status(404).json({ error: "Game not found." });
+  }
+  if (Number(game.creator_user_id) !== Number(req.session.userId)) {
+    return res.status(403).json({ error: "You can delete only your games." });
+  }
+
+  await dbQuery("DELETE FROM uploaded_games WHERE id = $1", [game.id]);
+  return res.json({ ok: true, slug });
+});
+
 app.post("/api/progress/add", async (req, res) => {
   if (!isAuthed(req)) {
     return res.status(401).json({ error: "Unauthorized" });
