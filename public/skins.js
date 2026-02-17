@@ -416,7 +416,9 @@ function renderShop() {
       ? skinState.catalog.filter((skin) => skinState.ownedSkins.includes(skin.id))
       : mode === "created"
         ? skinState.catalog.filter((skin) => skin.isCustom && skin.userCreated)
-        : skinState.catalog;
+        : mode === "exclusive"
+          ? skinState.catalog.filter((skin) => !skin.isCustom && skin.exclusive && Number(skin.crystalCost || 0) > 0)
+          : skinState.catalog.filter((skin) => !skin.exclusive)
 
     shop.innerHTML = "";
 
@@ -426,6 +428,8 @@ function renderShop() {
       empty.textContent =
         mode === "created"
           ? TT("No created skins yet.", "Пока нет созданных скинов.")
+          : mode === "exclusive"
+            ? TT("No exclusive crystal skins available.", "Пока нет эксклюзивных скинов за кристаллы.")
           : TT("No owned skins yet.", "Пока нет купленных скинов.");
       shop.appendChild(empty);
       continue;
@@ -460,6 +464,8 @@ function renderShop() {
         } else {
           meta.textContent = `${TT("Created by", "Создал")}: ${skin.createdBy || TT("player", "игрок")}`;
         }
+      } else if (skin.exclusive) {
+        meta.textContent = TT("Exclusive skin", "Эксклюзивный скин");
       } else {
         meta.textContent = TT("Official skin", "Официальный скин");
       }
