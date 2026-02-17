@@ -682,7 +682,10 @@ async function issuePasswordResetCode(userId, email) {
     [email, userId, hashCode(code), expiresAt, now]
   );
 
-  await sendPasswordResetEmail(email, code);
+  if (getMailConfig()) {
+    await sendPasswordResetEmail(email, code);
+  }
+  return code;
 }
 
 function skinNameFromId(id) {
@@ -2231,8 +2234,16 @@ app.post("/api/password/forgot", async (req, res) => {
     return res.status(429).json({ error: "Please wait before requesting another code." });
   }
 
+  const mailConfig = getMailConfig();
   try {
-    await issuePasswordResetCode(user.id, email);
+    const code = await issuePasswordResetCode(user.id, email);
+    if (!mailConfig) {
+      return res.json({
+        ok: true,
+        message: "SMTP is not configured. Dev mode: code filled automatically.",
+        redirect: `/reset-password?email=${encodeURIComponent(email)}&code=${encodeURIComponent(code)}`,
+      });
+    }
     return res.json({
       ok: true,
       message: "Reset code sent.",

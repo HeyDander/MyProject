@@ -277,9 +277,14 @@ function initAuthForm() {
   const endpoint = form.getAttribute("data-endpoint");
   const messageEl = form.querySelector("[data-message]");
   const emailInput = form.querySelector('input[name="email"]');
+  const codeInput = form.querySelector('input[name="code"]');
   if (emailInput && !emailInput.value) {
     const fromQuery = new URLSearchParams(window.location.search).get("email");
     if (fromQuery) emailInput.value = fromQuery;
+  }
+  if (codeInput && !codeInput.value) {
+    const fromQuery = new URLSearchParams(window.location.search).get("code");
+    if (fromQuery) codeInput.value = fromQuery;
   }
 
   form.addEventListener("submit", async (event) => {
