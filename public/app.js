@@ -1170,6 +1170,21 @@ function initFullscreenForGames() {
   actions.insertBefore(button, actions.firstChild);
 }
 
+function initShopViewMode() {
+  if (window.location.pathname !== "/shop") return;
+  const regularSection = document.querySelector("[data-regular-shop]");
+  const exclusiveSection = document.getElementById("exclusive-shop");
+  if (!regularSection || !exclusiveSection) return;
+
+  const isExclusiveMode = window.location.hash === "#exclusive-shop";
+  if (isExclusiveMode) {
+    regularSection.hidden = true;
+    exclusiveSection.scrollIntoView({ block: "start", behavior: "auto" });
+  } else {
+    regularSection.hidden = false;
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   initRussianLocale();
   initLanguageToggle();
@@ -1187,5 +1202,6 @@ document.addEventListener("DOMContentLoaded", () => {
   initUploadGameForm();
   initLastGameResume();
   initFullscreenForGames();
+  initShopViewMode();
 });
   
