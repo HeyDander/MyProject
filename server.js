@@ -5,7 +5,6 @@ const PgSession = require("connect-pg-simple")(session);
 const bcrypt = require("bcryptjs");
 const { Pool } = require("pg");
 const crypto = require("crypto");
-const nodemailer = require("nodemailer");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -581,41 +580,43 @@ function hashCode(code) {
 }
 
 function getMailConfig() {
-  const host = process.env.SMTP_HOST || process.env.MAIL_HOST || "";
-  const portRaw = process.env.SMTP_PORT || process.env.MAIL_PORT || "587";
-  const port = Number(portRaw);
-  const user = process.env.SMTP_USER || process.env.MAIL_USER || "";
-  const pass =
-    process.env.SMTP_PASS ||
-    process.env.SMTP_PASSWORD ||
-    process.env.MAIL_PASS ||
-    process.env.MAIL_PASSWORD ||
-    "";
-  const from = process.env.FROM_EMAIL || process.env.SMTP_FROM || process.env.MAIL_FROM || user;
-  const secureRaw = String(process.env.SMTP_SECURE || process.env.MAIL_SECURE || "").toLowerCase();
-  const secure = secureRaw === "true" || secureRaw === "1" || port === 465;
-  if (!host || !Number.isFinite(port) || port <= 0 || !user || !pass || !from) return null;
-  return { host, port, user, pass, from, secure };
+  const apiKey = String(process.env.RESEND_API_KEY || "").trim();
+  const from = String(process.env.FROM_EMAIL || "").trim();
+  if (!apiKey || !from) return null;
+  return { apiKey, from };
+}
+
+async function sendEmailViaResend({ to, subject, text }) {
+  const cfg = getMailConfig();
+  if (!cfg) {
+    throw new Error("Email service is unavailable. Configure RESEND_API_KEY and FROM_EMAIL.");
+  }
+  if (typeof fetch !== "function") {
+    throw new Error("Email service is unavailable. Server runtime has no fetch support.");
+  }
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${cfg.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: cfg.from,
+      to: [to],
+      subject,
+      text,
+    }),
+  });
+
+  if (!response.ok) {
+    const payload = await response.text().catch(() => "");
+    throw new Error(payload || "Failed to send email.");
+  }
 }
 
 async function sendVerificationEmail(email, code) {
-  const cfg = getMailConfig();
-  if (!cfg) {
-    throw new Error("Email service is unavailable. Try again later.");
-  }
-
-  const transporter = nodemailer.createTransport({
-    host: cfg.host,
-    port: cfg.port,
-    secure: cfg.secure,
-    auth: {
-      user: cfg.user,
-      pass: cfg.pass,
-    },
-  });
-
-  await transporter.sendMail({
-    from: cfg.from,
+  await sendEmailViaResend({
     to: email,
     subject: "Your verification code",
     text: `Your verification code is: ${code}. It expires in 10 minutes.`,
@@ -623,23 +624,7 @@ async function sendVerificationEmail(email, code) {
 }
 
 async function sendPasswordResetEmail(email, code) {
-  const cfg = getMailConfig();
-  if (!cfg) {
-    throw new Error("Email service is unavailable. Try again later.");
-  }
-
-  const transporter = nodemailer.createTransport({
-    host: cfg.host,
-    port: cfg.port,
-    secure: cfg.secure,
-    auth: {
-      user: cfg.user,
-      pass: cfg.pass,
-    },
-  });
-
-  await transporter.sendMail({
-    from: cfg.from,
+  await sendEmailViaResend({
     to: email,
     subject: "Your password reset code",
     text: `Your password reset code is: ${code}. It expires in 10 minutes.`,
@@ -2148,26 +2133,15 @@ app.post("/api/register", async (req, res) => {
   await ensureProgress(userId);
   const mailConfig = getMailConfig();
   if (!mailConfig) {
-    await dbQuery("UPDATE users SET email_verified = TRUE WHERE id = $1", [userId]);
-    req.session.userId = userId;
-    req.session.pendingEmail = null;
-    req.session.cookie.maxAge = remember
-      ? 1000 * 60 * 60 * 24 * 30
-      : 1000 * 60 * 60 * 24;
-    return res.json({ ok: true, redirect: "/dashboard" });
+    return res
+      .status(503)
+      .json({ error: "Email service is unavailable. Configure RESEND_API_KEY and FROM_EMAIL." });
   }
 
   try {
     await issueVerificationCode(userId, email);
   } catch (error) {
-    // Fallback: do not drop account if SMTP is temporarily broken.
-    await dbQuery("UPDATE users SET email_verified = TRUE WHERE id = $1", [userId]);
-    req.session.userId = userId;
-    req.session.pendingEmail = null;
-    req.session.cookie.maxAge = remember
-      ? 1000 * 60 * 60 * 24 * 30
-      : 1000 * 60 * 60 * 24;
-    return res.json({ ok: true, redirect: "/dashboard" });
+    return res.status(503).json({ error: "Failed to send verification code. Try again later." });
   }
 
   req.session.pendingEmail = email;
