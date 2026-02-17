@@ -1013,6 +1013,10 @@ app.get("/uploaded/:slug", requireAuth, (req, res) => {
   return res.sendFile(path.join(__dirname, "public", "uploaded-game.html"));
 });
 
+app.get("/community-games", requireAuth, (req, res) => {
+  return res.sendFile(path.join(__dirname, "public", "community-games.html"));
+});
+
 app.get("/challenge/:id", requireAuth, (req, res) => {
   return res.redirect(`/game/${String(req.params.id || "")}`);
 });

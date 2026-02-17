@@ -53,6 +53,9 @@ function initRussianLocale() {
     ["Achievements", "Достижения"],
     ["Friends League", "Лига друзей"],
     ["Your Uploaded Games", "Твои загруженные игры"],
+    ["All Created Games", "Все созданные игры"],
+    ["Games published by all players.", "Игры, опубликованные всеми игроками."],
+    ["Loading games...", "Загрузка игр..."],
     ["Friends Co-op", "Кооператив с друзьями"],
     ["Open Shop", "Открыть магазин"],
     ["Inventory", "Инвентарь"],
@@ -84,6 +87,7 @@ function initRussianLocale() {
     ["No incoming requests.", "Нет входящих заявок."],
     ["No outgoing requests.", "Нет исходящих заявок."],
     ["No uploaded games yet.", "Пока нет загруженных игр."],
+    ["No community games yet.", "Пока нет игр от сообщества."],
     ["Request sent.", "Заявка отправлена."],
     ["Request accepted.", "Заявка принята."],
     ["Request closed.", "Заявка закрыта."],
@@ -103,6 +107,7 @@ function initRussianLocale() {
     ["Upload Game From PC", "Загрузка игры с ПК"],
     ["Open PC Guide", "Открыть гайд по ПК"],
     ["Open Upload Page", "Открыть страницу загрузки"],
+    ["Community Games", "Игры сообщества"],
     ["Arcade Games", "Аркадные игры"],
     ["Arcade", "Аркада"],
     ["40 Separate Games", "40 отдельных игр"],
@@ -222,6 +227,7 @@ function initRussianLocale() {
     ["Upload Game", "Загрузка игры"],
     ["PC Upload Guide", "Гайд по загрузке с ПК"],
     ["Uploaded Game", "Загруженная игра"],
+    ["Community Games", "Игры сообщества"],
     ["Pong Online", "Pong Онлайн"],
     ["Arcade Games", "Аркадные игры"],
     ["Login", "Вход"],
@@ -694,6 +700,28 @@ async function initUploadedGames() {
   }
 }
 
+async function initCommunityGames() {
+  const list = document.querySelector("[data-community-games-list]");
+  if (!list) return;
+
+  try {
+    const data = await requestJson("/api/uploaded-games", { method: "GET" });
+    const games = Array.isArray(data.games) ? data.games.filter((g) => !g.mine).slice(0, 200) : [];
+    if (!games.length) {
+      list.innerHTML = `<p class="hub-muted">${T("No community games yet.", "Пока нет игр от сообщества.")}</p>`;
+      return;
+    }
+    list.innerHTML = games
+      .map(
+        (g) =>
+          `<p class="hub-row"><span>${g.title} (${g.creator})</span><a class="btn btn-ghost" href="/uploaded/${g.slug}">${T("Play", "Играть")}</a></p>`
+      )
+      .join("");
+  } catch (_error) {
+    list.innerHTML = `<p class="hub-muted">${T("Failed to load community games.", "Не удалось загрузить игры сообщества.")}</p>`;
+  }
+}
+
 function initUploadGameForm() {
   const form = document.querySelector("[data-upload-game-form]");
   if (!form) return;
@@ -808,6 +836,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initWatermark();
   initMobileGamepad();
   initUploadedGames();
+  initCommunityGames();
   initUploadGameForm();
   initLastGameResume();
 });
