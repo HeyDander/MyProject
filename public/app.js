@@ -58,6 +58,7 @@ function initRussianLocale() {
     ["Loading games...", "Загрузка игр..."],
     ["Friends Co-op", "Кооператив с друзьями"],
     ["Open Shop", "Открыть магазин"],
+    ["Exclusive Shop", "Эксклюзивный магазин"],
     ["Inventory", "Инвентарь"],
     ["Upload Game", "Загрузить игру"],
     ["PC Upload Guide", "Гайд по загрузке с ПК"],

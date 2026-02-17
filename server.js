@@ -12,6 +12,7 @@ const VERIFICATION_TTL_MS = 10 * 60 * 1000;
 const PASSWORD_RESET_TTL_MS = 10 * 60 * 1000;
 const MAX_CHALLENGE_GAMES = 10;
 const MAX_SKINS = 50;
+const EXCLUSIVE_SKIN_COUNT = 49;
 const CUSTOM_SKIN_ID_PREFIX = "custom-";
 const CREATOR_UNLOCK_POINTS = 200;
 const PONG_TARGET_SCORE = 7;
@@ -139,17 +140,13 @@ const rebuiltSkinCatalog = {};
 for (const id of preservedSkinIds) {
   if (SKIN_CATALOG[id]) rebuiltSkinCatalog[id] = { ...SKIN_CATALOG[id] };
 }
-for (let i = 1; i <= MAX_SKINS - preservedSkinIds.length; i += 1) {
+for (let i = 1; i <= EXCLUSIVE_SKIN_COUNT; i += 1) {
   const id = `artist-${String(i).padStart(2, "0")}`;
-  if (i <= 8) {
-    rebuiltSkinCatalog[id] = {
-      cost: 0,
-      crystalCost: 20 + i * 8,
-      exclusive: true,
-    };
-  } else {
-    rebuiltSkinCatalog[id] = { cost: 180 + i * 22 };
-  }
+  rebuiltSkinCatalog[id] = {
+    cost: 0,
+    crystalCost: 30 + i * 7,
+    exclusive: true,
+  };
 }
 for (const id of Object.keys(SKIN_CATALOG)) {
   delete SKIN_CATALOG[id];

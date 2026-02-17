@@ -418,7 +418,7 @@ function renderShop() {
         ? skinState.catalog.filter((skin) => skin.isCustom && skin.userCreated)
         : mode === "exclusive"
           ? skinState.catalog.filter((skin) => !skin.isCustom && skin.exclusive && Number(skin.crystalCost || 0) > 0)
-          : skinState.catalog.filter((skin) => !skin.exclusive)
+          : skinState.catalog.filter((skin) => !skin.exclusive);
 
     shop.innerHTML = "";
 
