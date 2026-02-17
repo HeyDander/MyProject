@@ -2123,30 +2123,18 @@ app.post("/api/register", async (req, res) => {
 
   const passwordHash = await bcrypt.hash(password, 12);
   const created = await dbGet(
-    "INSERT INTO users (username, email, password_hash, email_verified) VALUES ($1, $2, $3, FALSE) RETURNING id",
+    "INSERT INTO users (username, email, password_hash, email_verified) VALUES ($1, $2, $3, TRUE) RETURNING id",
     [username, email, passwordHash]
   );
   const userId = Number(created.id);
   await ensureProgress(userId);
-  const mailConfig = getMailConfig();
-  if (!mailConfig) {
-    return res
-      .status(503)
-      .json({ error: "Email service is unavailable. Configure RESEND_API_KEY and FROM_EMAIL." });
-  }
-
-  try {
-    await issueVerificationCode(userId, email);
-  } catch (error) {
-    return res.status(503).json({ error: "Failed to send verification code. Try again later." });
-  }
-
-  req.session.pendingEmail = email;
+  req.session.userId = userId;
+  req.session.pendingEmail = null;
   req.session.cookie.maxAge = remember
     ? 1000 * 60 * 60 * 24 * 30
     : 1000 * 60 * 60 * 24;
 
-  return res.json({ ok: true, redirect: `/verify?email=${encodeURIComponent(email)}` });
+  return res.json({ ok: true, redirect: "/dashboard" });
 });
 
 app.post("/api/login", async (req, res) => {
@@ -2182,10 +2170,6 @@ app.post("/api/login", async (req, res) => {
   if (!ok) {
     return res.status(401).json({ error: "Invalid login or password." });
   }
-  if (!user.email_verified) {
-    return res.status(403).json({ error: "Email is not verified. Please verify your email first." });
-  }
-
   req.session.userId = user.id;
   req.session.pendingEmail = null;
   await ensureProgress(req.session.userId);
@@ -2206,7 +2190,7 @@ app.post("/api/password/forgot", async (req, res) => {
     "SELECT id, email_verified FROM users WHERE email = $1 ORDER BY id DESC LIMIT 1",
     [email]
   );
-  if (!user || !user.email_verified) {
+  if (!user) {
     return res.json({
       ok: true,
       message: "If this email exists, a reset code was sent.",
