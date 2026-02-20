@@ -5,6 +5,7 @@ const PgSession = require("connect-pg-simple")(session);
 const bcrypt = require("bcryptjs");
 const { Pool } = require("pg");
 const crypto = require("crypto");
+const { createClerkClient, verifyToken } = require("@clerk/backend");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -21,6 +22,12 @@ const PONG_ROOM_IDLE_DROP_MS = 1000 * 60 * 10;
 const COOP_ROOM_TTL_MS = 1000 * 60 * 60 * 6;
 const COOP_ROOM_IDLE_DROP_MS = 1000 * 60 * 30;
 const ALLOWED_CHALLENGE_IDS = new Set(["game-001", "game-010"]);
+const CLERK_SECRET_KEY = String(process.env.CLERK_SECRET_KEY || "").trim();
+const CLERK_PUBLISHABLE_KEY = String(
+  process.env.CLERK_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || ""
+).trim();
+const hasClerkConfig = Boolean(CLERK_SECRET_KEY && CLERK_PUBLISHABLE_KEY);
+const clerkClient = hasClerkConfig ? createClerkClient({ secretKey: CLERK_SECRET_KEY }) : null;
 const DAILY_MISSION_POOL = [
   { id: "daily_points_120", label: "Earn 120 points today", type: "day_points", target: 120, rewardCrystals: 6 },
   { id: "daily_points_260", label: "Earn 260 points today", type: "day_points", target: 260, rewardCrystals: 12 },
@@ -459,12 +466,15 @@ async function initDatabase() {
       id BIGSERIAL PRIMARY KEY,
       username TEXT,
       email TEXT NOT NULL,
+      clerk_user_id TEXT,
       password_hash TEXT NOT NULL,
       email_verified BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
   await dbQuery("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key");
+  await ensureColumn("users", "clerk_user_id", "TEXT");
+  await dbQuery("CREATE UNIQUE INDEX IF NOT EXISTS users_clerk_user_id_idx ON users (clerk_user_id) WHERE clerk_user_id IS NOT NULL");
 
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS user_progress (
@@ -718,6 +728,80 @@ function requireAuth(req, res, next) {
     return res.redirect("/login");
   }
   next();
+}
+
+function getBearerToken(req) {
+  const header = String(req.headers.authorization || "");
+  if (!header.startsWith("Bearer ")) return "";
+  return header.slice("Bearer ".length).trim();
+}
+
+function baseUsernameFromEmail(email) {
+  return normalizeUsername(String(email || "").split("@")[0]) || "player";
+}
+
+async function findUniqueUsername(base) {
+  const root = normalizeUsername(base) || "player";
+  let candidate = root;
+  let suffix = 1;
+  while (true) {
+    const exists = await dbGet("SELECT id FROM users WHERE lower(username) = lower($1) LIMIT 1", [candidate]);
+    if (!exists) return candidate;
+    suffix += 1;
+    candidate = normalizeUsername(`${root}_${suffix}`) || `player_${suffix}`;
+  }
+}
+
+async function upsertLocalUserFromClerk(clerkUserId) {
+  if (!clerkClient) {
+    throw new Error("Clerk is not configured on server.");
+  }
+
+  const clerkUser = await clerkClient.users.getUser(clerkUserId);
+  const primaryEmailId = String(clerkUser.primaryEmailAddressId || "");
+  const primaryEmail = (clerkUser.emailAddresses || []).find((entry) => String(entry.id) === primaryEmailId);
+  const email = normalizeEmail(primaryEmail?.emailAddress || clerkUser.primaryEmailAddress?.emailAddress || "");
+  if (!isValidEmail(email)) {
+    throw new Error("Clerk user has no valid email.");
+  }
+
+  let local = await dbGet("SELECT id, username, email, clerk_user_id FROM users WHERE clerk_user_id = $1 LIMIT 1", [
+    clerkUserId,
+  ]);
+
+  if (!local) {
+    local = await dbGet(
+      "SELECT id, username, email, clerk_user_id FROM users WHERE email = $1 ORDER BY id DESC LIMIT 1",
+      [email]
+    );
+  }
+
+  if (local) {
+    const username = local.username || (await findUniqueUsername(clerkUser.username || baseUsernameFromEmail(email)));
+    await dbQuery(
+      `
+      UPDATE users
+      SET username = $1, email = $2, clerk_user_id = $3, email_verified = TRUE
+      WHERE id = $4
+      `,
+      [username, email, clerkUserId, local.id]
+    );
+    return Number(local.id);
+  }
+
+  const requestedUsername = normalizeUsername(clerkUser.username || "");
+  const username = await findUniqueUsername(requestedUsername || baseUsernameFromEmail(email));
+  const randomPassword = crypto.randomBytes(24).toString("hex");
+  const passwordHash = await bcrypt.hash(randomPassword, 12);
+  const inserted = await dbGet(
+    `
+    INSERT INTO users (username, email, clerk_user_id, password_hash, email_verified)
+    VALUES ($1, $2, $3, $4, TRUE)
+    RETURNING id
+    `,
+    [username, email, clerkUserId, passwordHash]
+  );
+  return Number(inserted.id);
 }
 
 async function normalizeSkins(rawOwnedSkins) {
@@ -2243,6 +2327,41 @@ app.post("/api/skins/delete", async (req, res) => {
   });
 });
 
+app.get("/api/auth/clerk/config", (_req, res) => {
+  if (!hasClerkConfig) {
+    return res.status(503).json({ error: "Clerk is not configured." });
+  }
+  return res.json({ publishableKey: CLERK_PUBLISHABLE_KEY });
+});
+
+app.post("/api/auth/clerk/exchange", async (req, res) => {
+  if (!hasClerkConfig) {
+    return res.status(503).json({ error: "Clerk is not configured." });
+  }
+
+  const token = getBearerToken(req);
+  if (!token) {
+    return res.status(401).json({ error: "Missing Clerk token." });
+  }
+
+  try {
+    const payload = await verifyToken(token, { secretKey: CLERK_SECRET_KEY });
+    const clerkUserId = String(payload?.sub || "").trim();
+    if (!clerkUserId) {
+      return res.status(401).json({ error: "Invalid Clerk token." });
+    }
+
+    const userId = await upsertLocalUserFromClerk(clerkUserId);
+    await ensureProgress(userId);
+    req.session.userId = userId;
+    req.session.pendingEmail = null;
+    req.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 30;
+    return res.json({ ok: true, redirect: "/dashboard" });
+  } catch (error) {
+    return res.status(401).json({ error: error.message || "Clerk authentication failed." });
+  }
+});
+
 app.post("/api/register", async (req, res) => {
   const username = normalizeUsername(req.body.username);
   const email = normalizeEmail(req.body.email);
@@ -2498,7 +2617,7 @@ app.post("/api/account/delete", async (req, res) => {
 app.post("/api/logout", (req, res) => {
   req.session.destroy(() => {
     res.clearCookie("connect.sid");
-    res.json({ ok: true, redirect: "/login" });
+    res.json({ ok: true, redirect: "/login?logout=1" });
   });
 });
 
