@@ -13,7 +13,7 @@
   }
 
   function renderFallbackAuth(reason) {
-    const title = mode === "sign-up" ? "Create account (fallback)" : "Sign in (fallback)";
+    const title = mode === "sign-up" ? "Create account" : "Sign in";
     const endpoint = mode === "sign-up" ? "/api/register" : "/api/login";
     root.innerHTML = "";
 
@@ -91,6 +91,13 @@
     const switchLink = document.createElement("a");
     switchLink.href = mode === "sign-up" ? "/login" : "/register";
     switchLink.textContent = mode === "sign-up" ? "Already have an account? Login" : "Create account";
+    switchLink.style.display = "inline-flex";
+    switchLink.style.alignItems = "center";
+    switchLink.style.justifyContent = "center";
+    switchLink.style.padding = "12px 16px";
+    switchLink.style.borderRadius = "12px";
+    switchLink.style.border = "1px solid rgba(109, 204, 150, 0.45)";
+    switchLink.style.background = "rgba(33, 66, 47, 0.38)";
     switchLink.style.color = "#87d7a9";
     switchLink.style.fontWeight = "700";
     switchLink.style.textDecoration = "none";
@@ -98,7 +105,10 @@
     switchWrap.appendChild(switchLink);
     root.appendChild(switchWrap);
 
-    setMessage(reason || "Clerk is unavailable, fallback form is enabled.", true);
+    if (reason) {
+      console.warn("[clerk-auth] Clerk unavailable, fallback enabled:", reason);
+    }
+    setMessage("", false);
   }
 
   function loadScript(src) {
@@ -151,7 +161,7 @@
       }
     }
 
-    throw lastError || new Error("Clerk JS failed to load.");
+    throw lastError || new Error("Unable to load auth provider");
   }
 
   async function getConfig() {
