@@ -23,20 +23,39 @@
     });
   }
 
-  async function ensureClerkLoaded() {
+  function decodePublishableHost(publishableKey) {
+    const parts = String(publishableKey || "").split("_");
+    if (parts.length < 3) return "";
+    try {
+      const decoded = atob(parts.slice(2).join("_"));
+      return decoded.replace(/\$$/, "").trim();
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  async function ensureClerkLoaded(publishableKey) {
     if (window.Clerk) return;
+    const instanceHost = decodePublishableHost(publishableKey);
     const sources = [
+      instanceHost
+        ? `https://${instanceHost}/npm/@clerk/clerk-js@5/dist/clerk.browser.js`
+        : "",
       "https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5.124.0/dist/clerk.browser.js",
       "https://unpkg.com/@clerk/clerk-js@5.124.0/dist/clerk.browser.js",
       "https://cdn.jsdelivr.net/npm/@clerk/clerk-js@4.73.14/dist/clerk.browser.js",
       "https://unpkg.com/@clerk/clerk-js@4.73.14/dist/clerk.browser.js",
-    ];
+    ].filter(Boolean);
 
     let lastError = null;
     for (const src of sources) {
       try {
         await loadScript(src);
-        if (window.Clerk) return;
+        for (let i = 0; i < 10; i += 1) {
+          if (window.Clerk) return;
+          // Let script settle in case of delayed assignment.
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
       } catch (error) {
         lastError = error;
       }
@@ -80,9 +99,8 @@
 
   async function mount() {
     try {
-      await ensureClerkLoaded();
-
       const config = await getConfig();
+      await ensureClerkLoaded(config.publishableKey);
       await window.Clerk.load({ publishableKey: config.publishableKey });
 
       const params = new URLSearchParams(window.location.search);
