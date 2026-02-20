@@ -38,6 +38,7 @@
     if (window.Clerk) return;
     const instanceHost = decodePublishableHost(publishableKey);
     const sources = [
+      "/vendor/clerk/clerk.browser.js",
       instanceHost
         ? `https://${instanceHost}/npm/@clerk/clerk-js@5/dist/clerk.browser.js`
         : "",

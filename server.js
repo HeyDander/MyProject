@@ -187,6 +187,7 @@ app.use(
   })
 );
 
+app.use("/vendor/clerk", express.static(path.join(__dirname, "node_modules", "@clerk", "clerk-js", "dist")));
 app.use(express.static(path.join(__dirname, "public")));
 
 const pongRooms = new Map();
