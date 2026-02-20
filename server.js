@@ -2367,7 +2367,6 @@ app.post("/api/register", async (req, res) => {
   const username = normalizeUsername(req.body.username);
   const email = normalizeEmail(req.body.email);
   const password = String(req.body.password || "");
-  const remember = Boolean(req.body.remember);
 
   if (!username || username.length < 3) {
     return res.status(400).json({ error: "Username must be at least 3 characters." });
@@ -2389,18 +2388,25 @@ app.post("/api/register", async (req, res) => {
 
   const passwordHash = await bcrypt.hash(password, 12);
   const created = await dbGet(
-    "INSERT INTO users (username, email, password_hash, email_verified) VALUES ($1, $2, $3, TRUE) RETURNING id",
+    "INSERT INTO users (username, email, password_hash, email_verified) VALUES ($1, $2, $3, FALSE) RETURNING id",
     [username, email, passwordHash]
   );
   const userId = Number(created.id);
   await ensureProgress(userId);
-  req.session.userId = userId;
-  req.session.pendingEmail = null;
-  req.session.cookie.maxAge = remember
-    ? 1000 * 60 * 60 * 24 * 30
-    : 1000 * 60 * 60 * 24;
+  req.session.userId = null;
+  req.session.pendingEmail = email;
+  req.session.cookie.maxAge = 1000 * 60 * 15;
 
-  return res.json({ ok: true, redirect: "/dashboard" });
+  try {
+    await issueVerificationCode(userId, email);
+    return res.json({ ok: true, redirect: `/verify?email=${encodeURIComponent(email)}` });
+  } catch (error) {
+    return res.status(500).json({
+      error:
+        error.message ||
+        "Failed to send verification code. Please try again later.",
+    });
+  }
 });
 
 app.post("/api/login", async (req, res) => {
@@ -2417,13 +2423,13 @@ app.post("/api/login", async (req, res) => {
   let user = null;
   if (username && username.length >= 3) {
     user = await dbGet(
-      "SELECT id, password_hash, email_verified FROM users WHERE lower(username) = lower($1) ORDER BY id DESC LIMIT 1",
+      "SELECT id, email, password_hash, email_verified FROM users WHERE lower(username) = lower($1) ORDER BY id DESC LIMIT 1",
       [username]
     );
   }
   if (!user && isValidEmail(email)) {
     user = await dbGet(
-      "SELECT id, password_hash, email_verified FROM users WHERE email = $1 ORDER BY id DESC LIMIT 1",
+      "SELECT id, email, password_hash, email_verified FROM users WHERE email = $1 ORDER BY id DESC LIMIT 1",
       [email]
     );
   }
@@ -2436,6 +2442,23 @@ app.post("/api/login", async (req, res) => {
   if (!ok) {
     return res.status(401).json({ error: "Invalid login or password." });
   }
+
+  if (!user.email_verified) {
+    req.session.userId = null;
+    req.session.pendingEmail = user.email;
+    req.session.cookie.maxAge = 1000 * 60 * 15;
+    try {
+      await issueVerificationCode(user.id, user.email);
+    } catch (_error) {
+      // Keep response consistent even if resend fails.
+    }
+    return res.status(403).json({
+      error: "Please verify your email first. We sent you a code.",
+      redirect: `/verify?email=${encodeURIComponent(user.email)}`,
+      requiresVerification: true,
+    });
+  }
+
   req.session.userId = user.id;
   req.session.pendingEmail = null;
   await ensureProgress(req.session.userId);

@@ -71,6 +71,10 @@
         });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) {
+          if (data.redirect) {
+            window.location.href = data.redirect;
+            return;
+          }
           throw new Error(data.error || "Request failed");
         }
         if (data.redirect) {
