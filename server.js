@@ -2354,10 +2354,28 @@ app.post("/api/auth/clerk/exchange", async (req, res) => {
 
     const userId = await upsertLocalUserFromClerk(clerkUserId);
     await ensureProgress(userId);
-    req.session.userId = userId;
-    req.session.pendingEmail = null;
-    req.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 30;
-    return res.json({ ok: true, redirect: "/dashboard" });
+    const user = await dbGet("SELECT id, email FROM users WHERE id = $1", [userId]);
+    if (!user || !isValidEmail(user.email)) {
+      return res.status(400).json({ error: "User email is not available for verification." });
+    }
+
+    req.session.userId = null;
+    req.session.pendingEmail = user.email;
+    req.session.cookie.maxAge = 1000 * 60 * 15;
+
+    try {
+      await issueVerificationCode(userId, user.email);
+    } catch (error) {
+      return res.status(500).json({
+        error: error.message || "Failed to send verification code.",
+      });
+    }
+
+    return res.json({
+      ok: true,
+      requiresVerification: true,
+      redirect: `/verify?email=${encodeURIComponent(user.email)}`,
+    });
   } catch (error) {
     return res.status(401).json({ error: error.message || "Clerk authentication failed." });
   }
@@ -2442,31 +2460,28 @@ app.post("/api/login", async (req, res) => {
   if (!ok) {
     return res.status(401).json({ error: "Invalid login or password." });
   }
-
-  if (!user.email_verified) {
-    req.session.userId = null;
-    req.session.pendingEmail = user.email;
-    req.session.cookie.maxAge = 1000 * 60 * 15;
-    try {
-      await issueVerificationCode(user.id, user.email);
-    } catch (_error) {
-      // Keep response consistent even if resend fails.
-    }
-    return res.status(403).json({
-      error: "Please verify your email first. We sent you a code.",
-      redirect: `/verify?email=${encodeURIComponent(user.email)}`,
-      requiresVerification: true,
-    });
-  }
-
-  req.session.userId = user.id;
-  req.session.pendingEmail = null;
-  await ensureProgress(req.session.userId);
+  req.session.userId = null;
+  req.session.pendingEmail = user.email;
   req.session.cookie.maxAge = remember
     ? 1000 * 60 * 60 * 24 * 30
-    : 1000 * 60 * 60 * 24;
+    : 1000 * 60 * 15;
 
-  return res.json({ ok: true, redirect: "/dashboard" });
+  const previous = await dbGet("SELECT last_sent_at FROM email_verifications WHERE email = $1", [user.email]);
+  if (!previous || Date.now() - Number(previous.last_sent_at) >= 45 * 1000) {
+    try {
+      await issueVerificationCode(user.id, user.email);
+    } catch (error) {
+      return res.status(500).json({
+        error: error.message || "Failed to send verification code.",
+      });
+    }
+  }
+
+  return res.json({
+    ok: true,
+    requiresVerification: true,
+    redirect: `/verify?email=${encodeURIComponent(user.email)}`,
+  });
 });
 
 app.post("/api/password/forgot", async (req, res) => {
@@ -2556,9 +2571,6 @@ app.post("/api/verify/resend", async (req, res) => {
   );
   if (!user) {
     return res.status(404).json({ error: "Account not found." });
-  }
-  if (user.email_verified) {
-    return res.status(400).json({ error: "Email already verified." });
   }
 
   const previous = await dbGet(
