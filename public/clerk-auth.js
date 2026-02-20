@@ -12,6 +12,39 @@
     messageEl.classList.toggle("is-success", !isError && Boolean(text));
   }
 
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = src;
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error(`Failed to load ${src}`));
+      document.head.appendChild(script);
+    });
+  }
+
+  async function ensureClerkLoaded() {
+    if (window.Clerk) return;
+    const sources = [
+      "https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5.124.0/dist/clerk.browser.js",
+      "https://unpkg.com/@clerk/clerk-js@5.124.0/dist/clerk.browser.js",
+      "https://cdn.jsdelivr.net/npm/@clerk/clerk-js@4.73.14/dist/clerk.browser.js",
+      "https://unpkg.com/@clerk/clerk-js@4.73.14/dist/clerk.browser.js",
+    ];
+
+    let lastError = null;
+    for (const src of sources) {
+      try {
+        await loadScript(src);
+        if (window.Clerk) return;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError || new Error("Clerk JS failed to load.");
+  }
+
   async function getConfig() {
     const response = await fetch("/api/auth/clerk/config", { credentials: "same-origin" });
     const payload = await response.json().catch(() => ({}));
@@ -47,9 +80,7 @@
 
   async function mount() {
     try {
-      if (!window.Clerk) {
-        throw new Error("Clerk JS failed to load.");
-      }
+      await ensureClerkLoaded();
 
       const config = await getConfig();
       await window.Clerk.load({ publishableKey: config.publishableKey });
