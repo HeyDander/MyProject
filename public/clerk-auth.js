@@ -12,6 +12,81 @@
     messageEl.classList.toggle("is-success", !isError && Boolean(text));
   }
 
+  function renderFallbackAuth(reason) {
+    const title = mode === "sign-up" ? "Create account (fallback)" : "Sign in (fallback)";
+    const endpoint = mode === "sign-up" ? "/api/register" : "/api/login";
+    root.innerHTML = "";
+
+    const form = document.createElement("form");
+    form.className = "login-form";
+    form.noValidate = true;
+
+    if (mode === "sign-up") {
+      form.innerHTML = `
+        <label>
+          Username
+          <input name="username" type="text" minlength="3" required placeholder="username" />
+        </label>
+        <label>
+          Email
+          <input name="email" type="email" required placeholder="name@example.com" />
+        </label>
+        <label>
+          Password
+          <input name="password" type="password" minlength="6" required placeholder="Create password" />
+        </label>
+        <button type="submit">${title}</button>
+      `;
+    } else {
+      form.innerHTML = `
+        <label>
+          Email
+          <input name="email" type="email" required placeholder="name@example.com" />
+        </label>
+        <label>
+          Password
+          <input name="password" type="password" required placeholder="Enter password" />
+        </label>
+        <label style="display:flex; gap:8px; align-items:center; font-size:14px;">
+          <input name="remember" type="checkbox" />
+          Remember me
+        </label>
+        <button type="submit">${title}</button>
+      `;
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      setMessage("Please wait...", false);
+      const formData = new FormData(form);
+      const payload = Object.fromEntries(formData.entries());
+      if (!("remember" in payload)) payload.remember = false;
+      else payload.remember = true;
+      try {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(data.error || "Request failed");
+        }
+        if (data.redirect) {
+          window.location.href = data.redirect;
+          return;
+        }
+        window.location.href = "/dashboard";
+      } catch (error) {
+        setMessage(error.message || "Failed to submit form.", true);
+      }
+    });
+
+    root.appendChild(form);
+    setMessage(reason || "Clerk is unavailable, fallback form is enabled.", true);
+  }
+
   function loadScript(src) {
     return new Promise((resolve, reject) => {
       const script = document.createElement("script");
@@ -142,7 +217,7 @@
         });
       }
     } catch (error) {
-      setMessage(error.message || "Clerk auth is unavailable.", true);
+      renderFallbackAuth(error.message || "Clerk auth is unavailable.");
     }
   }
 
