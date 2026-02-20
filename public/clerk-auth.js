@@ -84,6 +84,20 @@
     });
 
     root.appendChild(form);
+
+    const switchWrap = document.createElement("div");
+    switchWrap.style.marginTop = "10px";
+
+    const switchLink = document.createElement("a");
+    switchLink.href = mode === "sign-up" ? "/login" : "/register";
+    switchLink.textContent = mode === "sign-up" ? "Already have an account? Login" : "Create account";
+    switchLink.style.color = "#87d7a9";
+    switchLink.style.fontWeight = "700";
+    switchLink.style.textDecoration = "none";
+
+    switchWrap.appendChild(switchLink);
+    root.appendChild(switchWrap);
+
     setMessage(reason || "Clerk is unavailable, fallback form is enabled.", true);
   }
 
