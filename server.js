@@ -763,8 +763,17 @@ async function upsertLocalUserFromClerk(clerkUserId) {
   const primaryEmailId = String(clerkUser.primaryEmailAddressId || "");
   const primaryEmail = (clerkUser.emailAddresses || []).find((entry) => String(entry.id) === primaryEmailId);
   const email = normalizeEmail(primaryEmail?.emailAddress || clerkUser.primaryEmailAddress?.emailAddress || "");
+  const verificationStatus = String(
+    primaryEmail?.verification?.status || clerkUser.primaryEmailAddress?.verification?.status || ""
+  )
+    .trim()
+    .toLowerCase();
+  const isPrimaryEmailVerified = verificationStatus === "verified";
   if (!isValidEmail(email)) {
     throw new Error("Clerk user has no valid email.");
+  }
+  if (!isPrimaryEmailVerified) {
+    throw new Error("Clerk email is not verified.");
   }
 
   let local = await dbGet("SELECT id, username, email, clerk_user_id FROM users WHERE clerk_user_id = $1 LIMIT 1", [
@@ -783,10 +792,10 @@ async function upsertLocalUserFromClerk(clerkUserId) {
     await dbQuery(
       `
       UPDATE users
-      SET username = $1, email = $2, clerk_user_id = $3, email_verified = TRUE
-      WHERE id = $4
+      SET username = $1, email = $2, clerk_user_id = $3, email_verified = $4
+      WHERE id = $5
       `,
-      [username, email, clerkUserId, local.id]
+      [username, email, clerkUserId, isPrimaryEmailVerified, local.id]
     );
     return Number(local.id);
   }
@@ -798,10 +807,10 @@ async function upsertLocalUserFromClerk(clerkUserId) {
   const inserted = await dbGet(
     `
     INSERT INTO users (username, email, clerk_user_id, password_hash, email_verified)
-    VALUES ($1, $2, $3, $4, TRUE)
+    VALUES ($1, $2, $3, $4, $5)
     RETURNING id
     `,
-    [username, email, clerkUserId, passwordHash]
+    [username, email, clerkUserId, passwordHash, isPrimaryEmailVerified]
   );
   return Number(inserted.id);
 }
@@ -2371,6 +2380,9 @@ app.post("/api/auth/clerk/exchange", async (req, res) => {
       redirect: "/dashboard",
     });
   } catch (error) {
+    if (String(error?.message || "").toLowerCase().includes("not verified")) {
+      return res.status(403).json({ error: "Please verify your email in Clerk first." });
+    }
     return res.status(401).json({ error: error.message || "Clerk authentication failed." });
   }
 });
