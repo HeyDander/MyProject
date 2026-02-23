@@ -625,6 +625,10 @@ function getMailConfig() {
   return { apiKey, from };
 }
 
+function isMailConfigured() {
+  return Boolean(getMailConfig());
+}
+
 async function sendEmailViaResend({ to, subject, text }) {
   const cfg = getMailConfig();
   if (!cfg) {
@@ -2398,13 +2402,21 @@ app.post("/api/register", async (req, res) => {
     return res.status(409).json({ error: "Username is already taken." });
   }
 
+  const mailConfigured = isMailConfigured();
   const passwordHash = await bcrypt.hash(password, 12);
   const created = await dbGet(
-    "INSERT INTO users (username, email, password_hash, email_verified) VALUES ($1, $2, $3, FALSE) RETURNING id",
-    [username, email, passwordHash]
+    "INSERT INTO users (username, email, password_hash, email_verified) VALUES ($1, $2, $3, $4) RETURNING id",
+    [username, email, passwordHash, !mailConfigured]
   );
   const userId = Number(created.id);
   await ensureProgress(userId);
+  if (!mailConfigured) {
+    req.session.userId = userId;
+    req.session.pendingEmail = null;
+    req.session.cookie.maxAge = 1000 * 60 * 60 * 24;
+    return res.json({ ok: true, redirect: "/dashboard" });
+  }
+
   req.session.userId = null;
   req.session.pendingEmail = email;
   req.session.cookie.maxAge = 1000 * 60 * 15;
@@ -2454,6 +2466,24 @@ app.post("/api/login", async (req, res) => {
   if (!ok) {
     return res.status(401).json({ error: "Invalid login or password." });
   }
+
+  const mailConfigured = isMailConfigured();
+  if (user.email_verified || !mailConfigured) {
+    if (!user.email_verified && !mailConfigured) {
+      await dbQuery("UPDATE users SET email_verified = TRUE WHERE id = $1", [user.id]);
+    }
+    req.session.userId = user.id;
+    req.session.pendingEmail = null;
+    req.session.cookie.maxAge = remember
+      ? 1000 * 60 * 60 * 24 * 30
+      : 1000 * 60 * 60 * 24;
+    return res.json({
+      ok: true,
+      requiresVerification: false,
+      redirect: "/dashboard",
+    });
+  }
+
   req.session.userId = null;
   req.session.pendingEmail = user.email;
   req.session.cookie.maxAge = remember
