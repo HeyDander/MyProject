@@ -22,6 +22,7 @@
     "@clerk/clerk-js": "^5.124.0",
     "bcryptjs": "^3.0.3",
     "connect-pg-simple": "^9.0.1",
+    "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "express-session": "^1.19.0",
     "pg": "^8.16.3"
