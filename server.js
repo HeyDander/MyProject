@@ -2388,6 +2388,9 @@ app.post("/api/auth/clerk/exchange", async (req, res) => {
 });
 
 app.post("/api/register", async (req, res) => {
+  if (hasClerkConfig) {
+    return res.status(403).json({ error: "Local register is disabled. Use Clerk sign-up." });
+  }
   const username = normalizeUsername(req.body.username);
   const email = normalizeEmail(req.body.email);
   const password = String(req.body.password || "");
@@ -2434,6 +2437,9 @@ app.post("/api/register", async (req, res) => {
 });
 
 app.post("/api/login", async (req, res) => {
+  if (hasClerkConfig) {
+    return res.status(403).json({ error: "Local login is disabled. Use Clerk sign-in." });
+  }
   const identifierRaw = String(req.body.email || "").trim();
   const email = normalizeEmail(identifierRaw);
   const username = normalizeUsername(identifierRaw);
