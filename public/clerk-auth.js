@@ -13,106 +13,11 @@
   }
 
   function renderFallbackAuth(reason) {
-    const title = mode === "sign-up" ? "Create account" : "Sign in";
-    const endpoint = mode === "sign-up" ? "/api/register" : "/api/login";
     root.innerHTML = "";
-
-    const form = document.createElement("form");
-    form.className = "login-form";
-    form.noValidate = true;
-
-    if (mode === "sign-up") {
-      form.innerHTML = `
-        <label>
-          Username
-          <input name="username" type="text" minlength="3" required placeholder="username" />
-        </label>
-        <label>
-          Email
-          <input name="email" type="email" required placeholder="name@example.com" />
-        </label>
-        <label>
-          Password
-          <input name="password" type="password" minlength="6" required placeholder="Create password" />
-        </label>
-        <button type="submit">${title}</button>
-      `;
-    } else {
-      form.innerHTML = `
-        <label>
-          Email
-          <input name="email" type="email" required placeholder="name@example.com" />
-        </label>
-        <label>
-          Password
-          <input name="password" type="password" required placeholder="Enter password" />
-        </label>
-        <label style="display:flex; gap:8px; align-items:center; font-size:14px;">
-          <input name="remember" type="checkbox" />
-          Remember me
-        </label>
-        <button type="submit">${title}</button>
-      `;
-    }
-
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      setMessage("Please wait...", false);
-      const formData = new FormData(form);
-      const payload = Object.fromEntries(formData.entries());
-      if (!("remember" in payload)) payload.remember = false;
-      else payload.remember = true;
-      try {
-        const response = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify(payload),
-        });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          if (data.redirect) {
-            window.location.href = data.redirect;
-            return;
-          }
-          throw new Error(data.error || "Request failed");
-        }
-        if (data.redirect) {
-          window.location.href = data.redirect;
-          return;
-        }
-        window.location.href = "/dashboard";
-      } catch (error) {
-        setMessage(error.message || "Failed to submit form.", true);
-      }
-    });
-
-    root.appendChild(form);
-
-    const switchWrap = document.createElement("div");
-    switchWrap.style.marginTop = "10px";
-
-    const switchLink = document.createElement("a");
-    switchLink.href = mode === "sign-up" ? "/login" : "/register";
-    switchLink.textContent = mode === "sign-up" ? "Already have an account? Login" : "Create account";
-    switchLink.style.display = "inline-flex";
-    switchLink.style.alignItems = "center";
-    switchLink.style.justifyContent = "center";
-    switchLink.style.padding = "12px 16px";
-    switchLink.style.borderRadius = "12px";
-    switchLink.style.border = "1px solid rgba(109, 204, 150, 0.45)";
-    switchLink.style.background = "rgba(33, 66, 47, 0.38)";
-    switchLink.style.color = "#87d7a9";
-    switchLink.style.fontWeight = "700";
-    switchLink.style.textDecoration = "none";
-
-    switchWrap.appendChild(switchLink);
-    root.appendChild(switchWrap);
-
     if (reason) {
-      console.warn("[clerk-auth] Clerk unavailable, fallback enabled:", reason);
+      console.warn("[clerk-auth] Clerk unavailable:", reason);
     }
-    setMessage("", false);
+    setMessage("Clerk auth is unavailable. Check CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY.", true);
   }
 
   function loadScript(src) {
