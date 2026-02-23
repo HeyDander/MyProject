@@ -2360,22 +2360,15 @@ app.post("/api/auth/clerk/exchange", async (req, res) => {
       return res.status(400).json({ error: "User email is not available for verification." });
     }
 
-    req.session.userId = null;
-    req.session.pendingEmail = user.email;
-    req.session.cookie.maxAge = 1000 * 60 * 15;
-
-    try {
-      await issueVerificationCode(userId, user.email);
-    } catch (error) {
-      return res.status(500).json({
-        error: error.message || "Failed to send verification code.",
-      });
-    }
+    // Clerk already verifies identity; create local session immediately.
+    req.session.userId = userId;
+    req.session.pendingEmail = null;
+    req.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 7;
 
     return res.json({
       ok: true,
-      requiresVerification: true,
-      redirect: `/verify?email=${encodeURIComponent(user.email)}`,
+      requiresVerification: false,
+      redirect: "/dashboard",
     });
   } catch (error) {
     return res.status(401).json({ error: error.message || "Clerk authentication failed." });
