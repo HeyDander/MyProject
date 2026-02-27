@@ -5,3 +5,4 @@ mobile-app/node_modules/
 data/auth.db
 mobile-app/.expo/
 .env
+.DS_Store
