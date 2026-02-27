@@ -36,7 +36,7 @@
     auth0Link.className = "btn";
     auth0Link.style.display = "inline-flex";
     auth0Link.style.justifyContent = "center";
-    auth0Link.textContent = mode === "sign-up" ? "Create account with Auth0" : "Sign in with Auth0";
+    auth0Link.textContent = mode === "sign-up" ? "Create account with code (Auth0)" : "Sign in with code (Auth0)";
     root.appendChild(auth0Link);
 
     const switchWrap = document.createElement("div");

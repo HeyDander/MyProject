@@ -782,7 +782,7 @@ function decodeJwtPayload(jwt) {
   return JSON.parse(payload);
 }
 
-function auth0AuthorizeUrl(req, screenHint) {
+function auth0AuthorizeUrl(req, screenHint, extraParams = {}) {
   const url = new URL(`https://${AUTH0_DOMAIN}/authorize`);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("client_id", AUTH0_CLIENT_ID);
@@ -794,6 +794,11 @@ function auth0AuthorizeUrl(req, screenHint) {
   const state = crypto.randomBytes(16).toString("hex");
   req.session.auth0State = state;
   url.searchParams.set("state", state);
+  for (const [key, value] of Object.entries(extraParams)) {
+    if (value !== undefined && value !== null && String(value).trim() !== "") {
+      url.searchParams.set(key, String(value));
+    }
+  }
   return url.toString();
 }
 
@@ -1175,14 +1180,22 @@ app.get("/auth/auth0/login", (req, res) => {
   if (!hasAuth0Config) {
     return res.redirect("/login");
   }
-  return res.redirect(auth0AuthorizeUrl(req));
+  return res.redirect(
+    auth0AuthorizeUrl(req, undefined, {
+      connection: "email",
+    })
+  );
 });
 
 app.get("/auth/auth0/register", (req, res) => {
   if (!hasAuth0Config) {
     return res.redirect("/register");
   }
-  return res.redirect(auth0AuthorizeUrl(req, "signup"));
+  return res.redirect(
+    auth0AuthorizeUrl(req, "signup", {
+      connection: "email",
+    })
+  );
 });
 
 app.get("/auth/auth0/callback", async (req, res) => {
