@@ -2540,6 +2540,120 @@ app.get("/api/auth/providers", (_req, res) => {
   });
 });
 
+app.post("/api/auth0/passwordless/start", async (req, res) => {
+  if (!hasAuth0Config) {
+    return res.status(503).json({ error: "Auth0 is not configured." });
+  }
+
+  const email = normalizeEmail(req.body.email);
+  if (!isValidEmail(email)) {
+    return res.status(400).json({ error: "Please enter a valid email." });
+  }
+
+  try {
+    const payload = {
+      client_id: AUTH0_CLIENT_ID,
+      connection: "email",
+      email,
+      send: "code",
+      authParams: {
+        scope: "openid profile email",
+      },
+    };
+    if (AUTH0_CLIENT_SECRET) {
+      payload.client_secret = AUTH0_CLIENT_SECRET;
+    }
+
+    const response = await fetch(`https://${AUTH0_DOMAIN}/passwordless/start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message = String(data.error_description || data.error || "").trim() || "Failed to send code.";
+      return res.status(400).json({ error: message });
+    }
+
+    req.session.pendingEmail = email;
+    req.session.cookie.maxAge = 1000 * 60 * 15;
+    return res.json({ ok: true });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || "Failed to send code." });
+  }
+});
+
+app.post("/api/auth0/passwordless/verify", async (req, res) => {
+  if (!hasAuth0Config) {
+    return res.status(503).json({ error: "Auth0 is not configured." });
+  }
+
+  const email = normalizeEmail(req.body.email);
+  const code = String(req.body.code || "").trim();
+  if (!isValidEmail(email) || !/^\d{4,8}$/.test(code)) {
+    return res.status(400).json({ error: "Invalid email or verification code." });
+  }
+
+  try {
+    const payload = {
+      grant_type: "http://auth0.com/oauth/grant-type/passwordless/otp",
+      client_id: AUTH0_CLIENT_ID,
+      username: email,
+      otp: code,
+      realm: "email",
+      scope: "openid profile email",
+    };
+    if (AUTH0_CLIENT_SECRET) {
+      payload.client_secret = AUTH0_CLIENT_SECRET;
+    }
+
+    const tokenResponse = await fetch(`https://${AUTH0_DOMAIN}/oauth/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const tokenData = await tokenResponse.json().catch(() => ({}));
+    if (!tokenResponse.ok) {
+      const message =
+        String(tokenData.error_description || tokenData.error || "").trim() ||
+        "Invalid code or expired code.";
+      return res.status(400).json({ error: message });
+    }
+
+    const idToken = String(tokenData.id_token || "");
+    if (!idToken) {
+      return res.status(400).json({ error: "Auth0 did not return id_token." });
+    }
+
+    const claims = decodeJwtPayload(idToken);
+    const auth0UserId = String(claims.sub || "").trim();
+    const preferredUsername = normalizeUsername(claims.nickname || claims.name || "");
+    const emailFromToken = normalizeEmail(claims.email || email);
+    const emailVerified = Boolean(claims.email_verified);
+
+    if (!auth0UserId || !isValidEmail(emailFromToken)) {
+      return res.status(400).json({ error: "Auth0 token has no valid user/email." });
+    }
+
+    const userId = await upsertLocalUserFromAuth0(
+      auth0UserId,
+      emailFromToken,
+      preferredUsername,
+      emailVerified
+    );
+    await ensureProgress(userId);
+
+    req.session.userId = userId;
+    req.session.authProvider = "auth0";
+    req.session.pendingEmail = null;
+    req.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 7;
+    return res.json({ ok: true, redirect: "/dashboard" });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || "Failed to verify code." });
+  }
+});
+
 app.post("/api/auth/clerk/exchange", async (req, res) => {
   if (!hasClerkConfig) {
     return res.status(503).json({ error: "Clerk is not configured." });
