@@ -1230,6 +1230,7 @@ app.get("/auth/auth0/callback", async (req, res) => {
     const userId = await upsertLocalUserFromAuth0(auth0UserId, email, preferredUsername, emailVerified);
     await ensureProgress(userId);
     req.session.userId = userId;
+    req.session.authProvider = "auth0";
     req.session.pendingEmail = null;
     req.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 7;
     return res.redirect("/dashboard");
@@ -2541,6 +2542,7 @@ app.post("/api/auth/clerk/exchange", async (req, res) => {
 
     // Clerk already verifies identity; create local session immediately.
     req.session.userId = userId;
+    req.session.authProvider = "clerk";
     req.session.pendingEmail = null;
     req.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 7;
 
@@ -2558,6 +2560,9 @@ app.post("/api/auth/clerk/exchange", async (req, res) => {
 });
 
 app.post("/api/register", async (req, res) => {
+  if (hasAuth0Config) {
+    return res.status(403).json({ error: "Local register is disabled. Use Auth0." });
+  }
   const username = normalizeUsername(req.body.username);
   const email = normalizeEmail(req.body.email);
   const password = String(req.body.password || "");
@@ -2588,6 +2593,7 @@ app.post("/api/register", async (req, res) => {
   const userId = Number(created.id);
   await ensureProgress(userId);
   req.session.userId = null;
+  req.session.authProvider = "local";
   req.session.pendingEmail = email;
   req.session.cookie.maxAge = 1000 * 60 * 15;
 
@@ -2604,6 +2610,9 @@ app.post("/api/register", async (req, res) => {
 });
 
 app.post("/api/login", async (req, res) => {
+  if (hasAuth0Config) {
+    return res.status(403).json({ error: "Local login is disabled. Use Auth0." });
+  }
   const identifierRaw = String(req.body.email || "").trim();
   const email = normalizeEmail(identifierRaw);
   const username = normalizeUsername(identifierRaw);
@@ -2639,6 +2648,7 @@ app.post("/api/login", async (req, res) => {
 
   if (user.email_verified) {
     req.session.userId = user.id;
+    req.session.authProvider = "local";
     req.session.pendingEmail = null;
     req.session.cookie.maxAge = remember
       ? 1000 * 60 * 60 * 24 * 30
@@ -2651,6 +2661,7 @@ app.post("/api/login", async (req, res) => {
   }
 
   req.session.userId = null;
+  req.session.authProvider = "local";
   req.session.pendingEmail = user.email;
   req.session.cookie.maxAge = remember
     ? 1000 * 60 * 60 * 24 * 30
@@ -2743,6 +2754,7 @@ app.post("/api/password/reset", async (req, res) => {
   await dbQuery("DELETE FROM password_resets WHERE email = $1", [email]);
 
   req.session.userId = Number(reset.user_id);
+  req.session.authProvider = "local";
   req.session.pendingEmail = null;
   req.session.cookie.maxAge = 1000 * 60 * 60 * 24;
 
@@ -2804,6 +2816,7 @@ app.post("/api/verify/confirm", async (req, res) => {
   await dbQuery("DELETE FROM email_verifications WHERE email = $1", [email]);
 
   req.session.userId = verification.user_id;
+  req.session.authProvider = "local";
   req.session.pendingEmail = null;
   return res.json({ ok: true, redirect: "/dashboard" });
 });
@@ -2843,9 +2856,7 @@ app.post("/api/account/delete", async (req, res) => {
 app.post("/api/logout", (req, res) => {
   req.session.destroy(() => {
     res.clearCookie("connect.sid");
-    if (hasAuth0Config) {
-      return res.json({ ok: true, redirect: "/auth/auth0/logout" });
-    }
+    // Keep logout inside the website to avoid provider-side redirect errors.
     res.json({ ok: true, redirect: "/login?logout=1" });
   });
 });
