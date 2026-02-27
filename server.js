@@ -29,6 +29,11 @@ const CLERK_PUBLISHABLE_KEY = String(
 ).trim();
 const hasClerkConfig = Boolean(CLERK_SECRET_KEY && CLERK_PUBLISHABLE_KEY);
 const clerkClient = hasClerkConfig ? createClerkClient({ secretKey: CLERK_SECRET_KEY }) : null;
+const AUTH0_DOMAIN = String(process.env.AUTH0_DOMAIN || "").trim();
+const AUTH0_CLIENT_ID = String(process.env.AUTH0_CLIENT_ID || "").trim();
+const AUTH0_CLIENT_SECRET = String(process.env.AUTH0_CLIENT_SECRET || "").trim();
+const AUTH0_CALLBACK_URL = String(process.env.AUTH0_CALLBACK_URL || "").trim();
+const hasAuth0Config = Boolean(AUTH0_DOMAIN && AUTH0_CLIENT_ID && AUTH0_CLIENT_SECRET);
 const DAILY_MISSION_POOL = [
   { id: "daily_points_120", label: "Earn 120 points today", type: "day_points", target: 120, rewardCrystals: 6 },
   { id: "daily_points_260", label: "Earn 260 points today", type: "day_points", target: 260, rewardCrystals: 12 },
@@ -469,6 +474,7 @@ async function initDatabase() {
       username TEXT,
       email TEXT NOT NULL,
       clerk_user_id TEXT,
+      auth0_user_id TEXT,
       password_hash TEXT NOT NULL,
       email_verified BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMPTZ DEFAULT NOW()
@@ -476,7 +482,9 @@ async function initDatabase() {
   `);
   await dbQuery("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key");
   await ensureColumn("users", "clerk_user_id", "TEXT");
+  await ensureColumn("users", "auth0_user_id", "TEXT");
   await dbQuery("CREATE UNIQUE INDEX IF NOT EXISTS users_clerk_user_id_idx ON users (clerk_user_id) WHERE clerk_user_id IS NOT NULL");
+  await dbQuery("CREATE UNIQUE INDEX IF NOT EXISTS users_auth0_user_id_idx ON users (auth0_user_id) WHERE auth0_user_id IS NOT NULL");
 
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS user_progress (
@@ -754,6 +762,41 @@ async function findUniqueUsername(base) {
   }
 }
 
+function appBaseUrl(req) {
+  const configured = String(process.env.APP_BASE_URL || "").trim();
+  if (configured) return configured.replace(/\/+$/, "");
+  return `${req.protocol}://${req.get("host")}`;
+}
+
+function auth0CallbackUrl(req) {
+  return AUTH0_CALLBACK_URL || `${appBaseUrl(req)}/auth/auth0/callback`;
+}
+
+function decodeJwtPayload(jwt) {
+  const token = String(jwt || "");
+  const parts = token.split(".");
+  if (parts.length < 2) {
+    throw new Error("Invalid token payload.");
+  }
+  const payload = Buffer.from(parts[1], "base64url").toString("utf8");
+  return JSON.parse(payload);
+}
+
+function auth0AuthorizeUrl(req, screenHint) {
+  const url = new URL(`https://${AUTH0_DOMAIN}/authorize`);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("client_id", AUTH0_CLIENT_ID);
+  url.searchParams.set("redirect_uri", auth0CallbackUrl(req));
+  url.searchParams.set("scope", "openid profile email");
+  if (screenHint) {
+    url.searchParams.set("screen_hint", screenHint);
+  }
+  const state = crypto.randomBytes(16).toString("hex");
+  req.session.auth0State = state;
+  url.searchParams.set("state", state);
+  return url.toString();
+}
+
 async function upsertLocalUserFromClerk(clerkUserId) {
   if (!clerkClient) {
     throw new Error("Clerk is not configured on server.");
@@ -811,6 +854,45 @@ async function upsertLocalUserFromClerk(clerkUserId) {
     RETURNING id
     `,
     [username, email, clerkUserId, passwordHash, isPrimaryEmailVerified]
+  );
+  return Number(inserted.id);
+}
+
+async function upsertLocalUserFromAuth0(auth0UserId, email, preferredUsername, emailVerified) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!auth0UserId) {
+    throw new Error("Auth0 user id is missing.");
+  }
+  if (!isValidEmail(normalizedEmail)) {
+    throw new Error("Auth0 user has no valid email.");
+  }
+
+  let local = await dbGet("SELECT id, username, email FROM users WHERE auth0_user_id = $1 LIMIT 1", [auth0UserId]);
+  if (!local) {
+    local = await dbGet("SELECT id, username, email FROM users WHERE email = $1 ORDER BY id DESC LIMIT 1", [
+      normalizedEmail,
+    ]);
+  }
+
+  if (local) {
+    const username = local.username || (await findUniqueUsername(preferredUsername || baseUsernameFromEmail(email)));
+    await dbQuery(
+      "UPDATE users SET username = $1, email = $2, auth0_user_id = $3, email_verified = $4 WHERE id = $5",
+      [username, normalizedEmail, auth0UserId, Boolean(emailVerified), local.id]
+    );
+    return Number(local.id);
+  }
+
+  const username = await findUniqueUsername(preferredUsername || baseUsernameFromEmail(email));
+  const randomPassword = crypto.randomBytes(24).toString("hex");
+  const passwordHash = await bcrypt.hash(randomPassword, 12);
+  const inserted = await dbGet(
+    `
+    INSERT INTO users (username, email, auth0_user_id, password_hash, email_verified)
+    VALUES ($1, $2, $3, $4, $5)
+    RETURNING id
+    `,
+    [username, normalizedEmail, auth0UserId, passwordHash, Boolean(emailVerified)]
   );
   return Number(inserted.id);
 }
@@ -1087,6 +1169,87 @@ app.get("/register", (req, res) => {
     return res.redirect("/dashboard");
   }
   res.sendFile(path.join(__dirname, "public", "register.html"));
+});
+
+app.get("/auth/auth0/login", (req, res) => {
+  if (!hasAuth0Config) {
+    return res.redirect("/login");
+  }
+  return res.redirect(auth0AuthorizeUrl(req));
+});
+
+app.get("/auth/auth0/register", (req, res) => {
+  if (!hasAuth0Config) {
+    return res.redirect("/register");
+  }
+  return res.redirect(auth0AuthorizeUrl(req, "signup"));
+});
+
+app.get("/auth/auth0/callback", async (req, res) => {
+  if (!hasAuth0Config) {
+    return res.redirect("/login");
+  }
+  try {
+    const code = String(req.query.code || "").trim();
+    const state = String(req.query.state || "").trim();
+    if (!code || !state || !req.session.auth0State || state !== req.session.auth0State) {
+      return res.redirect("/login");
+    }
+    req.session.auth0State = null;
+
+    const tokenResponse = await fetch(`https://${AUTH0_DOMAIN}/oauth/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        grant_type: "authorization_code",
+        client_id: AUTH0_CLIENT_ID,
+        client_secret: AUTH0_CLIENT_SECRET,
+        code,
+        redirect_uri: auth0CallbackUrl(req),
+      }),
+    });
+    const tokenData = await tokenResponse.json().catch(() => ({}));
+    if (!tokenResponse.ok) {
+      return res.redirect("/login");
+    }
+
+    const idToken = String(tokenData.id_token || "");
+    if (!idToken) {
+      return res.redirect("/login");
+    }
+
+    const payload = decodeJwtPayload(idToken);
+    const auth0UserId = String(payload.sub || "").trim();
+    const email = normalizeEmail(payload.email || "");
+    const emailVerified = Boolean(payload.email_verified);
+    const preferredUsername = normalizeUsername(payload.nickname || payload.name || "");
+    if (!auth0UserId || !isValidEmail(email)) {
+      return res.redirect("/login");
+    }
+
+    const userId = await upsertLocalUserFromAuth0(auth0UserId, email, preferredUsername, emailVerified);
+    await ensureProgress(userId);
+    req.session.userId = userId;
+    req.session.pendingEmail = null;
+    req.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 7;
+    return res.redirect("/dashboard");
+  } catch (_error) {
+    return res.redirect("/login");
+  }
+});
+
+app.get("/auth/auth0/logout", (req, res) => {
+  const afterLogout = `${appBaseUrl(req)}/login`;
+  req.session.destroy(() => {
+    res.clearCookie("connect.sid");
+    if (!hasAuth0Config) {
+      return res.redirect("/login");
+    }
+    const url = new URL(`https://${AUTH0_DOMAIN}/v2/logout`);
+    url.searchParams.set("client_id", AUTH0_CLIENT_ID);
+    url.searchParams.set("returnTo", afterLogout);
+    return res.redirect(url.toString());
+  });
 });
 
 app.get("/verify", (req, res) => {
@@ -2345,6 +2508,13 @@ app.get("/api/auth/clerk/config", (_req, res) => {
   return res.json({ publishableKey: CLERK_PUBLISHABLE_KEY });
 });
 
+app.get("/api/auth/providers", (_req, res) => {
+  return res.json({
+    auth0: hasAuth0Config,
+    clerk: hasClerkConfig,
+  });
+});
+
 app.post("/api/auth/clerk/exchange", async (req, res) => {
   if (!hasClerkConfig) {
     return res.status(503).json({ error: "Clerk is not configured." });
@@ -2388,9 +2558,6 @@ app.post("/api/auth/clerk/exchange", async (req, res) => {
 });
 
 app.post("/api/register", async (req, res) => {
-  if (hasClerkConfig) {
-    return res.status(403).json({ error: "Local register is disabled. Use Clerk sign-up." });
-  }
   const username = normalizeUsername(req.body.username);
   const email = normalizeEmail(req.body.email);
   const password = String(req.body.password || "");
@@ -2437,9 +2604,6 @@ app.post("/api/register", async (req, res) => {
 });
 
 app.post("/api/login", async (req, res) => {
-  if (hasClerkConfig) {
-    return res.status(403).json({ error: "Local login is disabled. Use Clerk sign-in." });
-  }
   const identifierRaw = String(req.body.email || "").trim();
   const email = normalizeEmail(identifierRaw);
   const username = normalizeUsername(identifierRaw);
@@ -2679,6 +2843,9 @@ app.post("/api/account/delete", async (req, res) => {
 app.post("/api/logout", (req, res) => {
   req.session.destroy(() => {
     res.clearCookie("connect.sid");
+    if (hasAuth0Config) {
+      return res.json({ ok: true, redirect: "/auth/auth0/logout" });
+    }
     res.json({ ok: true, redirect: "/login?logout=1" });
   });
 });

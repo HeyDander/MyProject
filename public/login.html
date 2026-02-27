@@ -28,13 +28,13 @@
 
       <section class="login-card" aria-label="Login form">
         <h2>Login</h2>
-        <p class="card-subtitle">Sign in with Clerk authentication</p>
-        <div class="login-form" id="clerk-auth-root" data-clerk-mode="sign-in"></div>
-        <p class="form-message" data-clerk-message aria-live="polite"></p>
+        <p class="card-subtitle">Sign in with Auth0 or your local account</p>
+        <div class="login-form" id="auth-root" data-auth-mode="sign-in"></div>
+        <p class="form-message" data-auth-message aria-live="polite"></p>
       </section>
     </main>
 
     <script src="/app.js" defer></script>
-    <script src="/clerk-auth.js" defer></script>
+    <script src="/auth-provider.js" defer></script>
   </body>
 </html>

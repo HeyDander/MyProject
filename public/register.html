@@ -28,13 +28,13 @@
 
       <section class="login-card" aria-label="Register form">
         <h2>Register</h2>
-        <p class="card-subtitle">Create account with Clerk authentication</p>
-        <div class="login-form" id="clerk-auth-root" data-clerk-mode="sign-up"></div>
-        <p class="form-message" data-clerk-message aria-live="polite"></p>
+        <p class="card-subtitle">Create account with Auth0 or local signup</p>
+        <div class="login-form" id="auth-root" data-auth-mode="sign-up"></div>
+        <p class="form-message" data-auth-message aria-live="polite"></p>
       </section>
     </main>
 
     <script src="/app.js" defer></script>
-    <script src="/clerk-auth.js" defer></script>
+    <script src="/auth-provider.js" defer></script>
   </body>
 </html>
