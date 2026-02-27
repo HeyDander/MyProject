@@ -1200,13 +1200,20 @@ app.get("/auth/auth0/register", (req, res) => {
 
 app.get("/auth/auth0/callback", async (req, res) => {
   if (!hasAuth0Config) {
-    return res.redirect("/login");
+    return res.redirect("/login?auth_error=Auth0%20is%20not%20configured");
   }
   try {
+    const providerError = String(req.query.error || "").trim();
+    const providerErrorDescription = String(req.query.error_description || "").trim();
+    if (providerError) {
+      const message = providerErrorDescription || providerError;
+      return res.redirect(`/login?auth_error=${encodeURIComponent(message)}`);
+    }
+
     const code = String(req.query.code || "").trim();
     const state = String(req.query.state || "").trim();
     if (!code || !state || !req.session.auth0State || state !== req.session.auth0State) {
-      return res.redirect("/login");
+      return res.redirect("/login?auth_error=Invalid%20Auth0%20callback%20state");
     }
     req.session.auth0State = null;
 
@@ -1223,12 +1230,15 @@ app.get("/auth/auth0/callback", async (req, res) => {
     });
     const tokenData = await tokenResponse.json().catch(() => ({}));
     if (!tokenResponse.ok) {
-      return res.redirect("/login");
+      const message =
+        String(tokenData.error_description || tokenData.error || "").trim() ||
+        "Failed to exchange Auth0 code";
+      return res.redirect(`/login?auth_error=${encodeURIComponent(message)}`);
     }
 
     const idToken = String(tokenData.id_token || "");
     if (!idToken) {
-      return res.redirect("/login");
+      return res.redirect("/login?auth_error=Auth0%20did%20not%20return%20id_token");
     }
 
     const payload = decodeJwtPayload(idToken);
@@ -1237,7 +1247,7 @@ app.get("/auth/auth0/callback", async (req, res) => {
     const emailVerified = Boolean(payload.email_verified);
     const preferredUsername = normalizeUsername(payload.nickname || payload.name || "");
     if (!auth0UserId || !isValidEmail(email)) {
-      return res.redirect("/login");
+      return res.redirect("/login?auth_error=Auth0%20payload%20has%20no%20valid%20email");
     }
 
     const userId = await upsertLocalUserFromAuth0(auth0UserId, email, preferredUsername, emailVerified);
@@ -1247,8 +1257,9 @@ app.get("/auth/auth0/callback", async (req, res) => {
     req.session.pendingEmail = null;
     req.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 7;
     return res.redirect("/dashboard");
-  } catch (_error) {
-    return res.redirect("/login");
+  } catch (error) {
+    const message = String(error?.message || "Auth0 callback failed").trim();
+    return res.redirect(`/login?auth_error=${encodeURIComponent(message)}`);
   }
 });
 

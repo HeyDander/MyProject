@@ -25,6 +25,11 @@
 
   async function mount() {
     root.innerHTML = "";
+    const params = new URLSearchParams(window.location.search);
+    const authError = params.get("auth_error");
+    if (authError) {
+      setMessage(authError, true);
+    }
     const providers = await getProviders();
     if (!providers.auth0) {
       setMessage("Auth0 is not configured on server.", true);
